@@ -48,7 +48,7 @@ export const MOCK_RESTAURANT: Restaurant = {
   name: "مطعم النخبة",
   nameEn: "Al Nakhba Restaurant",
   logo: "🍽️",
-  coverColor: "#f97316",
+  coverColor: "#7c3aed",
   description: "أفضل المأكولات العربية والشرقية",
   owner: "أحمد الزهراني",
   plan: "pro",
