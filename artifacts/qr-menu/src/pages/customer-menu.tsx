@@ -207,6 +207,14 @@ export default function CustomerMenuPage() {
       <div className="relative" style={{ background: `linear-gradient(135deg, ${restaurant?.cover_color ?? "#7c3aed"}, ${restaurant?.cover_color ?? "#7c3aed"}cc)` }}>
         <div className="absolute inset-0 bg-black/20" />
         <div className="relative px-4 pt-8 pb-6 text-center">
+          {/* Back button */}
+          <button
+            onClick={() => window.history.back()}
+            className="absolute top-4 right-4 w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
+          >
+            <ChevronRight className="w-5 h-5 text-white" />
+          </button>
+
           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl mx-auto mb-3 shadow-lg">
             {restaurant?.logo ?? "🍽️"}
           </div>
