@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { QrCode, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { QrCode, Eye, EyeOff, Loader2, AlertCircle, ChevronRight } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { Link } from "wouter";
 
@@ -73,6 +73,15 @@ export default function LoginPage() {
       {/* Right form panel */}
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
+          {/* Back button */}
+          <button
+            onClick={() => window.history.back()}
+            className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors mb-8 group"
+          >
+            <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            رجوع
+          </button>
+
           {/* Logo (mobile only) */}
           <div className="flex items-center gap-2.5 mb-8 lg:hidden">
             <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
