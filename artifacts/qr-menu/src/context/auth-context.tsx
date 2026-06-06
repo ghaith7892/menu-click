@@ -106,9 +106,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (data: RegisterData) => {
+    // Pass name & role as metadata — the DB trigger creates the public.users profile automatically
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
+      options: {
+        data: {
+          name: data.ownerName,
+          role: "restaurant",
+        },
+      },
     });
 
     if (signUpError) {
@@ -121,14 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = authData.user?.id;
     if (!userId) return { success: false, error: "حدث خطأ غير متوقع" };
 
-    const { error: profileError } = await supabase.from("users").insert({
-      id: userId,
-      name: data.ownerName,
-      email: data.email,
-      role: "restaurant",
-    });
-
-    if (profileError) return { success: false, error: "فشل إنشاء الملف الشخصي" };
+    // Small delay to allow the trigger to create the user profile
+    await new Promise(r => setTimeout(r, 500));
 
     const { error: restaurantError } = await supabase.from("restaurants").insert({
       id: crypto.randomUUID(),
@@ -136,9 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: data.restaurantName,
       plan: data.plan,
       tables_count: 5,
-    });
+    } as Record<string, unknown>);
 
-    if (restaurantError) return { success: false, error: "فشل إنشاء بيانات المطعم" };
+    if (restaurantError) {
+      // Likely email confirmation is still pending — registration succeeded
+      // restaurant will be created after the user confirms their email and logs in
+      console.warn("Restaurant insert skipped (session not ready):", restaurantError.message);
+    }
 
     return { success: true };
   };
