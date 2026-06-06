@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Store, CreditCard, TrendingUp,
   QrCode, Settings, LogOut, Search,
-  CheckCircle2, XCircle, Eye, Trash2
+  CheckCircle2, XCircle, Eye, Trash2, Users
 } from "lucide-react";
-import { MOCK_ADMIN_RESTAURANTS, type Restaurant } from "@/data/mock";
+import { getAllRestaurants } from "@/lib/api";
+import type { RestaurantRow } from "@/lib/database.types";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/auth-context";
 
 type Tab = "overview" | "restaurants" | "plans" | "settings";
 
-const PLAN_LABELS: Record<Restaurant["plan"], { label: string; color: string }> = {
+const PLAN_LABELS: Record<RestaurantRow["plan"], { label: string; color: string }> = {
   free:       { label: "مجاني",    color: "bg-gray-100 text-gray-600 border-gray-200" },
   pro:        { label: "احترافي",  color: "bg-primary/10 text-primary border-primary/20" },
   enterprise: { label: "مؤسسي",   color: "bg-purple-100 text-purple-700 border-purple-200" },
@@ -21,24 +22,29 @@ export default function AdminPage() {
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [search, setSearch] = useState("");
-  const [restaurants, setRestaurants] = useState(MOCK_ADMIN_RESTAURANTS);
+  const [restaurants, setRestaurants] = useState<RestaurantRow[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  useEffect(() => {
+    getAllRestaurants().then(r => { setRestaurants(r); setDataLoading(false); });
+  }, []);
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
   const filtered = restaurants.filter(r =>
-    r.name.includes(search) || r.owner.includes(search)
+    r.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const stats = {
     total: restaurants.length,
-    active: restaurants.filter(r => r.isActive).length,
+    active: restaurants.filter(r => r.is_active).length,
     pro: restaurants.filter(r => r.plan === "pro").length,
     enterprise: restaurants.filter(r => r.plan === "enterprise").length,
     revenue: restaurants.reduce((s, r) => s + (r.plan === "pro" ? 49 : r.plan === "enterprise" ? 149 : 0), 0),
   };
 
   const toggleActive = (id: string) => {
-    setRestaurants(prev => prev.map(r => r.id === id ? { ...r, isActive: !r.isActive } : r));
+    setRestaurants(prev => prev.map(r => r.id === id ? { ...r, is_active: !r.is_active } : r));
   };
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -153,12 +159,12 @@ export default function AdminPage() {
                   <div className="space-y-3">
                     {restaurants.slice(0, 4).map(r => (
                       <div key={r.id} className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: r.coverColor + "20" }}>
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: (r.cover_color ?? "#7c3aed") + "20" }}>
                           {r.logo}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-foreground truncate">{r.name}</p>
-                          <p className="text-xs text-muted-foreground">{r.owner}</p>
+                          <p className="text-xs text-muted-foreground">{r.owner_id}</p>
                         </div>
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${PLAN_LABELS[r.plan].color}`}>
                           {PLAN_LABELS[r.plan].label}
@@ -221,33 +227,33 @@ export default function AdminPage() {
                       <tr key={r.id} className="hover:bg-accent/20 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base" style={{ background: r.coverColor + "20" }}>
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base" style={{ background: (r.cover_color ?? "#7c3aed") + "20" }}>
                               {r.logo}
                             </div>
                             <div>
                               <p className="font-semibold text-foreground text-sm">{r.name}</p>
-                              <p className="text-xs text-muted-foreground">منذ {r.createdAt}</p>
+                              <p className="text-xs text-muted-foreground">منذ {new Date(r.created_at).toLocaleDateString("ar-SA")}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-foreground">{r.owner}</td>
+                        <td className="px-4 py-3 text-foreground text-xs text-muted-foreground truncate max-w-[100px]">{r.owner_id}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${PLAN_LABELS[r.plan].color}`}>
                             {PLAN_LABELS[r.plan].label}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-foreground">{r.tables}</td>
+                        <td className="px-4 py-3 text-foreground">{r.tables_count}</td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => toggleActive(r.id)}
                             className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border transition-all ${
-                              r.isActive
+                              r.is_active
                                 ? "bg-green-50 text-green-700 border-green-200"
                                 : "bg-red-50 text-red-600 border-red-200"
                             }`}
                           >
-                            {r.isActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                            {r.isActive ? "نشط" : "موقوف"}
+                            {r.is_active ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                            {r.is_active ? "نشط" : "موقوف"}
                           </button>
                         </td>
                         <td className="px-4 py-3">
@@ -300,12 +306,12 @@ export default function AdminPage() {
                   {restaurants.map(r => (
                     <div key={r.id} className="px-5 py-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: r.coverColor + "20" }}>
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: (r.cover_color ?? "#7c3aed") + "20" }}>
                           {r.logo}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">{r.name}</p>
-                          <p className="text-xs text-muted-foreground">تسجيل: {r.createdAt}</p>
+                          <p className="text-xs text-muted-foreground">تسجيل: {new Date(r.created_at).toLocaleDateString("ar-SA")}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">

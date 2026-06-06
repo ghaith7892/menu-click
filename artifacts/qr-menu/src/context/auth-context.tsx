@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 
 export type UserRole = "admin" | "restaurant";
 
@@ -10,15 +12,6 @@ export interface AuthUser {
   restaurantId?: string;
   restaurantName?: string;
   plan?: "free" | "pro" | "enterprise";
-  avatar?: string;
-}
-
-interface AuthContextType {
-  user: AuthUser | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
 }
 
 export interface RegisterData {
@@ -29,96 +22,130 @@ export interface RegisterData {
   plan: "free" | "pro";
 }
 
-const MOCK_USERS: { email: string; password: string; user: AuthUser }[] = [
-  {
-    email: "admin@qrmenu.sa",
-    password: "admin123",
-    user: {
-      id: "user-admin",
-      name: "مدير المنصة",
-      email: "admin@qrmenu.sa",
-      role: "admin",
-    },
-  },
-  {
-    email: "ahmed@nakhba.sa",
-    password: "password123",
-    user: {
-      id: "user-1",
-      name: "أحمد الزهراني",
-      email: "ahmed@nakhba.sa",
-      role: "restaurant",
-      restaurantId: "rest-1",
-      restaurantName: "مطعم النخبة",
-      plan: "pro",
-    },
-  },
-  {
-    email: "sara@bareeq.sa",
-    password: "password123",
-    user: {
-      id: "user-2",
-      name: "سارة القحطاني",
-      email: "sara@bareeq.sa",
-      role: "restaurant",
-      restaurantId: "rest-2",
-      restaurantName: "كافيه بريق",
-      plan: "pro",
-    },
-  },
-];
+interface AuthContextType {
+  user: AuthUser | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: string }>;
+  register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
+  logout: () => void;
+}
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const STORAGE_KEY = "qrmenu_auth_user";
+async function fetchUserProfile(userId: string): Promise<AuthUser | null> {
+  const { data: profile } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (!profile) return null;
+
+  const result: AuthUser = {
+    id: profile.id,
+    name: profile.name,
+    email: profile.email,
+    role: profile.role,
+  };
+
+  if (profile.role === "restaurant") {
+    const { data: restaurant } = await supabase
+      .from("restaurants")
+      .select("id, name, plan")
+      .eq("owner_id", userId)
+      .single();
+
+    if (restaurant) {
+      result.restaurantId = restaurant.id;
+      result.restaurantName = restaurant.name;
+      result.plan = restaurant.plan;
+    }
+  }
+
+  return result;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setUser(JSON.parse(stored));
-    } catch {}
-    setLoading(false);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) await loadUser(session);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session) {
+          await loadUser(session);
+        } else {
+          setUser(null);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
+  const loadUser = async (session: Session) => {
+    const profile = await fetchUserProfile(session.user.id);
+    setUser(profile);
+  };
+
   const login = async (email: string, password: string) => {
-    await new Promise(r => setTimeout(r, 900));
-    const match = MOCK_USERS.find(
-      u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    );
-    if (!match) {
-      return { success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
+    const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      const msg = error.message.includes("Invalid")
+        ? "البريد الإلكتروني أو كلمة المرور غير صحيحة"
+        : error.message;
+      return { success: false, error: msg };
     }
-    setUser(match.user);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(match.user));
-    return { success: true };
+    const profile = authData.session ? await fetchUserProfile(authData.session.user.id) : null;
+    return { success: true, role: profile?.role };
   };
 
   const register = async (data: RegisterData) => {
-    await new Promise(r => setTimeout(r, 1200));
-    const exists = MOCK_USERS.find(u => u.email.toLowerCase() === data.email.toLowerCase());
-    if (exists) return { success: false, error: "هذا البريد الإلكتروني مسجّل مسبقاً" };
+    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+    });
 
-    const newUser: AuthUser = {
-      id: `user-${Date.now()}`,
+    if (signUpError) {
+      const msg = signUpError.message.includes("already")
+        ? "هذا البريد الإلكتروني مسجّل مسبقاً"
+        : signUpError.message;
+      return { success: false, error: msg };
+    }
+
+    const userId = authData.user?.id;
+    if (!userId) return { success: false, error: "حدث خطأ غير متوقع" };
+
+    const { error: profileError } = await supabase.from("users").insert({
+      id: userId,
       name: data.ownerName,
       email: data.email,
       role: "restaurant",
-      restaurantId: `rest-${Date.now()}`,
-      restaurantName: data.restaurantName,
+    });
+
+    if (profileError) return { success: false, error: "فشل إنشاء الملف الشخصي" };
+
+    const { error: restaurantError } = await supabase.from("restaurants").insert({
+      id: crypto.randomUUID(),
+      owner_id: userId,
+      name: data.restaurantName,
       plan: data.plan,
-    };
-    setUser(newUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
+      tables_count: 5,
+    });
+
+    if (restaurantError) return { success: false, error: "فشل إنشاء بيانات المطعم" };
+
     return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
   };
 
   return (

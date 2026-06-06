@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { ShoppingCart, Plus, Minus, X, ChevronRight, CheckCircle2, Search, Info } from "lucide-react";
-import {
-  MOCK_RESTAURANT, MOCK_CATEGORIES, MOCK_MENU_ITEMS, type MenuItem
-} from "@/data/mock";
+import { useState, useEffect } from "react";
+import { ShoppingCart, Plus, Minus, X, ChevronRight, CheckCircle2, Search, Loader2, Info } from "lucide-react";
+import { useParams, useSearch } from "wouter";
+import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
+import { getRestaurantById, getCategories, getMenuItems, createOrder } from "@/lib/api";
 
 interface CartItem {
-  item: MenuItem;
+  item: MenuItemRow;
   quantity: number;
   selectedExtras: string[];
 }
@@ -13,16 +13,40 @@ interface CartItem {
 type Screen = "menu" | "cart" | "success";
 
 export default function CustomerMenuPage() {
+  const params = useParams<{ restaurantId: string }>();
+  const search = useSearch();
+  const restaurantId = params.restaurantId;
+  const tableNum = parseInt(new URLSearchParams(search).get("table") ?? "1");
+
+  const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [screen, setScreen] = useState<Screen>("menu");
-  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [tableNum] = useState(5);
 
-  const filteredItems = MOCK_MENU_ITEMS.filter(item => {
-    const matchesCat = activeCategory === "all" || item.categoryId === activeCategory;
+  useEffect(() => {
+    if (!restaurantId) return;
+    (async () => {
+      setDataLoading(true);
+      const [rest, cats, items] = await Promise.all([
+        getRestaurantById(restaurantId),
+        getCategories(restaurantId),
+        getMenuItems(restaurantId),
+      ]);
+      setRestaurant(rest);
+      setCategories(cats);
+      setMenuItems(items);
+      setDataLoading(false);
+    })();
+  }, [restaurantId]);
+
+  const filteredItems = menuItems.filter(item => {
+    const matchesCat = activeCategory === "all" || item.category_id === activeCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCat && matchesSearch;
   });
@@ -36,7 +60,7 @@ export default function CustomerMenuPage() {
     return sum + (c.item.price + extrasTotal) * c.quantity;
   }, 0);
 
-  const addToCart = (item: MenuItem, extras: string[]) => {
+  const addToCart = (item: MenuItemRow, extras: string[]) => {
     setCart(prev => {
       const existing = prev.find(c => c.item.id === item.id);
       if (existing) {
@@ -61,7 +85,23 @@ export default function CustomerMenuPage() {
     setSelectedExtras(prev => prev.includes(name) ? prev.filter(e => e !== name) : [...prev, name]);
   };
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
+    if (!restaurant) return;
+    const orderItems = cart.map(({ item, quantity, selectedExtras: exs }) => ({
+      item_id: item.id,
+      item_name: item.name,
+      price: item.price,
+      quantity,
+      extras: exs,
+    }));
+    await createOrder({
+      restaurant_id: restaurant.id,
+      table_number: tableNum,
+      items: orderItems,
+      status: "pending",
+      total: cartTotal,
+      customer_note: null,
+    });
     setScreen("success");
     setTimeout(() => { setCart([]); setScreen("menu"); }, 4000);
   };
@@ -118,7 +158,7 @@ export default function CustomerMenuPage() {
             cart.map(({ item, quantity, selectedExtras: exs }) => (
               <div key={item.id} className="bg-card border border-border rounded-2xl p-4 flex gap-3">
                 <div className="w-14 h-14 bg-accent rounded-xl flex items-center justify-center text-2xl shrink-0">
-                  {item.image}
+                  {item.image ?? "🍽️"}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-foreground">{item.name}</p>
@@ -164,14 +204,14 @@ export default function CustomerMenuPage() {
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       {/* Restaurant header */}
-      <div className="relative" style={{ background: `linear-gradient(135deg, ${MOCK_RESTAURANT.coverColor}, ${MOCK_RESTAURANT.coverColor}cc)` }}>
+      <div className="relative" style={{ background: `linear-gradient(135deg, ${restaurant?.cover_color ?? "#7c3aed"}, ${restaurant?.cover_color ?? "#7c3aed"}cc)` }}>
         <div className="absolute inset-0 bg-black/20" />
         <div className="relative px-4 pt-8 pb-6 text-center">
           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl mx-auto mb-3 shadow-lg">
-            {MOCK_RESTAURANT.logo}
+            {restaurant?.logo ?? "🍽️"}
           </div>
-          <h1 className="text-xl font-black text-white">{MOCK_RESTAURANT.name}</h1>
-          <p className="text-white/80 text-sm mt-1">{MOCK_RESTAURANT.description}</p>
+          <h1 className="text-xl font-black text-white">{restaurant?.name ?? "المنيو"}</h1>
+          <p className="text-white/80 text-sm mt-1">{restaurant?.description ?? ""}</p>
           <div className="mt-3 inline-flex items-center gap-1.5 bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-full backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
             طاولة رقم {tableNum}
@@ -201,7 +241,7 @@ export default function CustomerMenuPage() {
           >
             الكل
           </button>
-          {MOCK_CATEGORIES.map(cat => (
+          {categories.map(cat => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
@@ -228,12 +268,12 @@ export default function CustomerMenuPage() {
                   onClick={() => { setSelectedItem(item); setSelectedExtras([]); }}
                   className="w-20 h-20 bg-accent rounded-xl flex items-center justify-center text-4xl shrink-0 hover:scale-105 transition-transform"
                 >
-                  {item.image}
+                  {item.image ?? "🍽️"}
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start gap-1">
                     <p className="font-bold text-sm text-foreground leading-snug flex-1">{item.name}</p>
-                    {item.popular && <span className="text-xs bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded-full shrink-0">🔥</span>}
+                    {item.is_popular && <span className="text-xs bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded-full shrink-0">🔥</span>}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
                   <div className="flex items-center justify-between mt-2">
@@ -292,7 +332,7 @@ export default function CustomerMenuPage() {
             </div>
             <div className="p-4 space-y-5">
               <div className="w-24 h-24 bg-accent rounded-2xl flex items-center justify-center text-5xl mx-auto">
-                {selectedItem.image}
+                {selectedItem.image ?? "🍽️"}
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">{selectedItem.description}</p>

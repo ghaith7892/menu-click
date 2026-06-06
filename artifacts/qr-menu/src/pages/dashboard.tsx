@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, UtensilsCrossed, QrCode, ShoppingBag,
   Plus, Pencil, Trash2, Bell, LogOut,
   CheckCircle2, Clock, ChefHat, Truck, X, Settings,
-  TrendingUp, Star, DollarSign, Table2, Eye
+  TrendingUp, Star, DollarSign, Table2, Eye, Loader2
 } from "lucide-react";
+import type { OrderStatus, CategoryRow, MenuItemRow, OrderRow, RestaurantRow } from "@/lib/database.types";
 import {
-  MOCK_RESTAURANT, MOCK_CATEGORIES, MOCK_MENU_ITEMS,
-  MOCK_ORDERS, type Order, type OrderStatus, type MenuItem
-} from "@/data/mock";
+  getRestaurantByOwner, getCategories, getMenuItems, getOrders,
+  updateOrderStatus, deleteMenuItem, subscribeToOrders
+} from "@/lib/api";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/auth-context";
 
@@ -25,27 +26,62 @@ export default function DashboardPage() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAddItem, setShowAddItem] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState<number | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let unsubscribe: (() => void) | undefined;
+    (async () => {
+      setDataLoading(true);
+      const rest = await getRestaurantByOwner(user.id);
+      setRestaurant(rest);
+      if (rest) {
+        const [cats, items, ords] = await Promise.all([
+          getCategories(rest.id),
+          getMenuItems(rest.id),
+          getOrders(rest.id),
+        ]);
+        setCategories(cats);
+        setMenuItems(items);
+        setOrders(ords);
+        unsubscribe = subscribeToOrders(rest.id, setOrders);
+      }
+      setDataLoading(false);
+    })();
+    return () => unsubscribe?.();
+  }, [user?.id]);
+
   const handleLogout = () => { logout(); navigate("/login"); };
 
   const pendingCount = orders.filter(o => o.status === "pending").length;
 
-  const advanceOrder = (id: string) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== id) return o;
-      const cfg = STATUS_CONFIG[o.status];
-      return cfg.next ? { ...o, status: cfg.next } : o;
-    }));
+  const advanceOrder = async (id: string) => {
+    const order = orders.find(o => o.id === id);
+    if (!order) return;
+    const cfg = STATUS_CONFIG[order.status];
+    if (!cfg.next) return;
+    const { data } = await updateOrderStatus(id, cfg.next);
+    if (data) setOrders(prev => prev.map(o => o.id === id ? data : o));
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    await deleteMenuItem(id);
+    setMenuItems(prev => prev.filter(i => i.id !== id));
   };
 
   const filteredItems = selectedCategory === "all"
-    ? MOCK_MENU_ITEMS
-    : MOCK_MENU_ITEMS.filter(i => i.categoryId === selectedCategory);
+    ? menuItems
+    : menuItems.filter(i => i.category_id === selectedCategory);
+
+  const tablesCount = restaurant?.tables_count ?? 5;
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "overview", label: "نظرة عامة",   icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -61,12 +97,12 @@ export default function DashboardPage() {
         <div className="p-5 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-xl shadow-sm">
-              {MOCK_RESTAURANT.logo}
+              {restaurant?.logo ?? "🍽️"}
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-sm text-foreground truncate">{user?.restaurantName || MOCK_RESTAURANT.name}</p>
+              <p className="font-bold text-sm text-foreground truncate">{restaurant?.name ?? user?.restaurantName ?? "مطعمي"}</p>
               <span className="text-xs bg-accent text-primary font-semibold px-2 py-0.5 rounded-full">
-                {(user?.plan || MOCK_RESTAURANT.plan) === "pro" ? "احترافي" : (user?.plan || MOCK_RESTAURANT.plan) === "enterprise" ? "مؤسسي" : "مجاني"}
+                {(restaurant?.plan ?? user?.plan) === "pro" ? "احترافي" : (restaurant?.plan ?? user?.plan) === "enterprise" ? "مؤسسي" : "مجاني"}
               </span>
             </div>
           </div>
@@ -117,7 +153,7 @@ export default function DashboardPage() {
             <h1 className="font-bold text-lg text-foreground">
               {navItems.find(n => n.id === activeTab)?.label}
             </h1>
-            <p className="text-xs text-muted-foreground">مرحباً، {user?.name || MOCK_RESTAURANT.owner} 👋</p>
+            <p className="text-xs text-muted-foreground">مرحباً، {user?.name ?? "مرحباً"} 👋</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -139,7 +175,7 @@ export default function DashboardPage() {
                   </div>
                   {orders.filter(o => o.status === "pending").map(o => (
                     <div key={o.id} className="p-3 border-b border-border last:border-0 hover:bg-accent/30">
-                      <p className="text-sm font-medium text-foreground">طلب جديد — طاولة {o.tableNumber}</p>
+                      <p className="text-sm font-medium text-foreground">طلب جديد — طاولة {o.table_number}</p>
                       <p className="text-xs text-muted-foreground">{o.items.length} أصناف • {o.total} ر.س</p>
                     </div>
                   ))}
@@ -165,7 +201,7 @@ export default function DashboardPage() {
                   { label: "إجمالي الطلبات اليوم", value: "24", icon: <ShoppingBag className="w-5 h-5" />, color: "text-blue-600", bg: "bg-blue-50" },
                   { label: "الإيرادات اليوم", value: "1,840 ر.س", icon: <DollarSign className="w-5 h-5" />, color: "text-green-600", bg: "bg-green-50" },
                   { label: "متوسط قيمة الطلب", value: "76 ر.س", icon: <TrendingUp className="w-5 h-5" />, color: "text-primary", bg: "bg-accent" },
-                  { label: "الطاولات النشطة", value: `${orders.filter(o => o.status !== "delivered").length}/${MOCK_RESTAURANT.tables}`, icon: <Table2 className="w-5 h-5" />, color: "text-purple-600", bg: "bg-purple-50" },
+                  { label: "الطاولات النشطة", value: `${orders.filter(o => o.status !== "delivered").length}/${tablesCount}`, icon: <Table2 className="w-5 h-5" />, color: "text-purple-600", bg: "bg-purple-50" },
                 ].map((stat, i) => (
                   <div key={i} className="bg-card border border-border rounded-2xl p-5">
                     <div className={`w-10 h-10 ${stat.bg} ${stat.color} rounded-xl flex items-center justify-center mb-3`}>
@@ -190,11 +226,11 @@ export default function DashboardPage() {
                       <div key={order.id} className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 bg-accent rounded-xl flex items-center justify-center font-bold text-sm text-primary">
-                            {order.tableNumber}
+                            {order.table_number}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-foreground">طاولة {order.tableNumber}</p>
-                            <p className="text-xs text-muted-foreground">{order.items.length} صنف • {order.total} ر.س</p>
+                            <p className="text-sm font-semibold text-foreground">طاولة {order.table_number}</p>
+                            <p className="text-xs text-muted-foreground">{(order.items as unknown[]).length} صنف • {order.total} ر.س</p>
                           </div>
                         </div>
                         <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.color}`}>
@@ -212,9 +248,9 @@ export default function DashboardPage() {
                   <h2 className="font-bold text-foreground">الأصناف الأكثر طلباً</h2>
                 </div>
                 <div className="p-4 space-y-3">
-                  {MOCK_MENU_ITEMS.filter(i => i.popular).map((item, idx) => (
+                  {menuItems.filter(i => i.is_popular).slice(0, 5).map((item, idx) => (
                     <div key={item.id} className="flex items-center gap-3">
-                      <span className="text-lg w-8 text-center">{item.image}</span>
+                      <span className="text-lg w-8 text-center">{item.image ?? "🍽️"}</span>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-foreground">{item.name}</p>
                         <div className="flex items-center gap-2 mt-1">
@@ -248,16 +284,16 @@ export default function DashboardPage() {
                     onClick={() => setSelectedCategory("all")}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${selectedCategory === "all" ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-accent/60"}`}
                   >
-                    الكل ({MOCK_MENU_ITEMS.length})
+                    الكل ({menuItems.length})
                   </button>
-                  {MOCK_CATEGORIES.map(cat => (
+                  {categories.map(cat => (
                     <button
                       key={cat.id}
                       onClick={() => setSelectedCategory(cat.id)}
                       className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${selectedCategory === cat.id ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-accent/60"}`}
                     >
                       <span>{cat.icon}</span>
-                      {cat.name} ({MOCK_MENU_ITEMS.filter(i => i.categoryId === cat.id).length})
+                      {cat.name} ({menuItems.filter(i => i.category_id === cat.id).length})
                     </button>
                   ))}
                 </div>
@@ -277,11 +313,11 @@ export default function DashboardPage() {
               {/* Items grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {filteredItems.map(item => {
-                  const cat = MOCK_CATEGORIES.find(c => c.id === item.categoryId);
+                  const cat = categories.find(c => c.id === item.category_id);
                   return (
                     <div key={item.id} className="bg-card border border-border rounded-2xl p-4 flex gap-3 hover:border-primary/30 transition-all group">
                       <div className="w-16 h-16 bg-accent rounded-xl flex items-center justify-center text-2xl shrink-0">
-                        {item.image}
+                        {item.image ?? "🍽️"}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
@@ -293,7 +329,10 @@ export default function DashboardPage() {
                             <button className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-muted-foreground hover:text-primary transition-colors">
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
-                            <button className="w-7 h-7 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive/70 hover:text-destructive transition-colors">
+                            <button
+                              onClick={() => handleDeleteItem(item.id)}
+                              className="w-7 h-7 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive/70 hover:text-destructive transition-colors"
+                            >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -301,7 +340,7 @@ export default function DashboardPage() {
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-sm font-black text-primary">{item.price} ر.س</span>
                           <div className="flex items-center gap-1.5">
-                            {item.popular && <span className="text-xs bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">🔥 رائج</span>}
+                            {item.is_popular && <span className="text-xs bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">🔥 رائج</span>}
                             <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{cat?.icon} {cat?.name}</span>
                           </div>
                         </div>
@@ -329,7 +368,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-center py-8 bg-muted/40 rounded-2xl">
                   <div className="bg-white p-6 rounded-2xl shadow-md text-center">
                     <QrCode className="w-32 h-32 text-foreground mx-auto" />
-                    <p className="mt-3 text-sm font-bold text-foreground">{MOCK_RESTAURANT.name}</p>
+                    <p className="mt-3 text-sm font-bold text-foreground">{restaurant?.name ?? "مطعمي"}</p>
                     <p className="text-xs text-muted-foreground">امسح لعرض المنيو</p>
                   </div>
                 </div>
@@ -339,14 +378,14 @@ export default function DashboardPage() {
                 <div className="p-5 border-b border-border flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-foreground">أكواد QR للطاولات</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{MOCK_RESTAURANT.tables} طاولة</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{tablesCount} طاولة</p>
                   </div>
                   <button className="flex items-center gap-2 text-sm font-semibold text-primary border border-primary/30 px-3 py-2 rounded-xl hover:bg-accent transition-all">
                     تحميل الكل
                   </button>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 p-4">
-                  {Array.from({ length: MOCK_RESTAURANT.tables }, (_, i) => i + 1).map(table => (
+                  {Array.from({ length: tablesCount }, (_, i) => i + 1).map(table => (
                     <button
                       key={table}
                       onClick={() => setSelectedQrTable(selectedQrTable === table ? null : table)}
@@ -368,8 +407,8 @@ export default function DashboardPage() {
                         <QrCode className="w-20 h-20 text-foreground" />
                       </div>
                       <div>
-                        <p className="font-bold text-foreground mb-1">{MOCK_RESTAURANT.name} — طاولة {selectedQrTable}</p>
-                        <p className="text-sm text-muted-foreground mb-4">رابط: menu.example.com/rest-1?table={selectedQrTable}</p>
+                        <p className="font-bold text-foreground mb-1">{restaurant?.name ?? "مطعمي"} — طاولة {selectedQrTable}</p>
+                        <p className="text-sm text-muted-foreground mb-4">رابط: /menu/{restaurant?.id}?table={selectedQrTable}</p>
                         <div className="flex gap-2">
                           <button className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl hover:brightness-110 transition-all">تحميل PNG</button>
                           <button className="border border-border text-sm font-medium text-foreground px-4 py-2 rounded-xl hover:bg-card transition-all">نسخ الرابط</button>
@@ -412,12 +451,12 @@ export default function DashboardPage() {
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center font-black text-lg text-primary">
-                            {order.tableNumber}
+                            {order.table_number}
                           </div>
                           <div>
-                            <p className="font-bold text-foreground">طاولة رقم {order.tableNumber}</p>
+                            <p className="font-bold text-foreground">طاولة رقم {order.table_number}</p>
                             <p className="text-xs text-muted-foreground">
-                              {new Date(order.createdAt).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(order.created_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
                         </div>
@@ -426,12 +465,12 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       <div className="space-y-2 mb-4">
-                        {order.items.map(({ item, quantity }, idx) => (
+                        {(order.items as { item_id: string; item_name: string; price: number; quantity: number }[]).map((line, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-sm">
-                            <span className="text-base">{item.image}</span>
-                            <span className="flex-1 text-foreground">{item.name}</span>
-                            <span className="text-muted-foreground">×{quantity}</span>
-                            <span className="font-semibold text-foreground">{item.price * quantity} ر.س</span>
+                            <span className="text-base">🍽️</span>
+                            <span className="flex-1 text-foreground">{line.item_name}</span>
+                            <span className="text-muted-foreground">×{line.quantity}</span>
+                            <span className="font-semibold text-foreground">{(line.price * line.quantity).toFixed(2)} ر.س</span>
                           </div>
                         ))}
                       </div>
@@ -485,7 +524,7 @@ export default function DashboardPage() {
                 <div>
                   <label className="text-xs font-semibold text-foreground block mb-1.5">القسم *</label>
                   <select className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all">
-                    {MOCK_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                   </select>
                 </div>
               </div>

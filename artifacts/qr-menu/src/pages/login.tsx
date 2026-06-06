@@ -22,19 +22,11 @@ export default function LoginPage() {
     const result = await login(email, password);
     setLoading(false);
     if (result.success) {
-      const stored = localStorage.getItem("qrmenu_auth_user");
-      const user = stored ? JSON.parse(stored) : null;
-      if (user?.role === "admin") navigate("/admin");
+      if (result.role === "admin") navigate("/admin");
       else navigate("/dashboard");
     } else {
       setError(result.error || "حدث خطأ، حاول مرة أخرى");
     }
-  };
-
-  const fillDemo = (type: "admin" | "restaurant") => {
-    if (type === "admin") { setEmail("admin@qrmenu.sa"); setPassword("admin123"); }
-    else { setEmail("ahmed@nakhba.sa"); setPassword("password123"); }
-    setError("");
   };
 
   return (
@@ -91,25 +83,6 @@ export default function LoginPage() {
 
           <h1 className="text-2xl font-black text-foreground mb-1">أهلاً بك مجدداً 👋</h1>
           <p className="text-muted-foreground text-sm mb-8">سجّل دخولك لإدارة مطعمك</p>
-
-          {/* Demo accounts */}
-          <div className="bg-accent/60 border border-primary/20 rounded-2xl p-4 mb-6">
-            <p className="text-xs font-bold text-primary mb-3">حسابات تجريبية جاهزة:</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => fillDemo("restaurant")}
-                className="flex-1 text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary py-2 px-3 rounded-xl transition-colors"
-              >
-                🍽️ صاحب مطعم
-              </button>
-              <button
-                onClick={() => fillDemo("admin")}
-                className="flex-1 text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary py-2 px-3 rounded-xl transition-colors"
-              >
-                🔧 مسؤول المنصة
-              </button>
-            </div>
-          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
