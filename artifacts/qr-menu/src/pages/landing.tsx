@@ -129,37 +129,39 @@ export default function LandingPage() {
           <PhoneMockup />
         </div>
 
-        {/* CTA Buttons */}
-        <div className="px-6 pb-4 pt-8 space-y-3">
-          <div className="flex gap-3">
-            <Link href="/menu/demo" className="flex-1">
-              <button className="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
-                <Eye className="w-4 h-4" />
-                معاينة تجريبية
-              </button>
-            </Link>
-            <Link href="/register" className="flex-1">
-              <button className="w-full text-white font-bold py-4 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2"
-                style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}>
-                <QrCode className="w-4 h-4" />
-                معاينة QR
-              </button>
-            </Link>
-          </div>
+        {/* CTA Buttons — stacked vertically */}
+        <div className="px-6 pb-4 pt-8 max-w-md mx-auto w-full space-y-3">
+          {/* Demo preview */}
+          <Link href="/menu/demo" className="block">
+            <button className="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 shadow-lg">
+              <Eye className="w-4 h-4" />
+              معاينة تجريبية
+            </button>
+          </Link>
+
+          {/* QR preview */}
+          <Link href="/register" className="block">
+            <button className="w-full text-white font-bold py-4 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
+              style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}>
+              <QrCode className="w-4 h-4" />
+              معاينة QR
+            </button>
+          </Link>
+
+          {/* Main CTA */}
+          <Link href="/register" className="block">
+            <button className="w-full bg-white text-gray-900 font-bold py-4 rounded-2xl text-sm hover:bg-gray-50 transition-colors shadow-xl">
+              أنشئ منيو مجاناً
+            </button>
+          </Link>
 
           {/* Slide dots */}
-          <div className="flex justify-center gap-1.5 py-2">
+          <div className="flex justify-center gap-1.5 pt-3">
             {[0,1,2,3].map(i=>(
               <div key={i} className={`rounded-full transition-all ${i===3?"bg-white w-5 h-1.5":"bg-white/40 w-1.5 h-1.5"}`} />
             ))}
           </div>
 
-          {/* Main CTA */}
-          <Link href="/register">
-            <button className="w-full bg-white text-gray-900 font-bold py-4 rounded-2xl text-base hover:bg-gray-50 transition-colors shadow-xl">
-              أنشئ منيو مجاناً
-            </button>
-          </Link>
           <p className="text-center text-white/50 text-xs pb-4">لا يلزم بطاقة ائتمان</p>
         </div>
       </section>
