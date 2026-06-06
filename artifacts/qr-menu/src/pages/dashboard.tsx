@@ -9,7 +9,7 @@ import {
 import type { OrderStatus, CategoryRow, MenuItemRow, OrderRow, RestaurantRow } from "@/lib/database.types";
 import {
   getRestaurantByOwner, getCategories, getMenuItems, getOrders,
-  updateOrderStatus, deleteMenuItem, subscribeToOrders
+  updateOrderStatus, deleteMenuItem, subscribeToOrders, createMenuItem
 } from "@/lib/api";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/auth-context";
@@ -39,11 +39,13 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 /* ─── Item Modal (Menusa style) ───────────────────── */
 function ItemModal({
-  open, onClose, categories,
+  open, onClose, categories, restaurantId, onAdd,
 }: {
   open: boolean;
   onClose: () => void;
   categories: CategoryRow[];
+  restaurantId: string;
+  onAdd: (item: MenuItemRow) => void;
 }) {
   const [selectedCat, setSelectedCat] = useState(categories[0]?.id ?? "");
   const [name, setName] = useState("");
@@ -55,7 +57,45 @@ function ItemModal({
   const [photo, setPhoto] = useState<string | null>(null);
   const [hideFromMenu, setHideFromMenu] = useState(false);
   const [outOfStock, setOutOfStock] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const resetForm = () => {
+    setName(""); setDescription(""); setPhoto(null);
+    setHideFromMenu(false); setOutOfStock(false); setSaveError("");
+    setVariations([{ id: "1", name: "", price: "", amount: "" }]);
+    setSelectedCat(categories[0]?.id ?? "");
+  };
+
+  const handleClose = () => { resetForm(); onClose(); };
+
+  const handleSubmit = async () => {
+    if (!name.trim()) { setSaveError("يرجى إدخال اسم الصنف"); return; }
+    if (!selectedCat) { setSaveError("يرجى اختيار قسم"); return; }
+    const firstVariation = variations[0];
+    const price = parseFloat(firstVariation?.price ?? "0") || 0;
+    setSaving(true);
+    setSaveError("");
+    const { data, error } = await createMenuItem({
+      id: crypto.randomUUID(),
+      restaurant_id: restaurantId,
+      category_id: selectedCat,
+      name: name.trim(),
+      name_en: null,
+      description: description.trim() || null,
+      price,
+      image: photo,
+      is_popular: false,
+      is_available: !outOfStock,
+      extras: null,
+      sort_order: 0,
+    });
+    setSaving(false);
+    if (error || !data) { setSaveError("حدث خطأ أثناء الإضافة، حاول مجدداً"); return; }
+    onAdd(data);
+    handleClose();
+  };
 
   const addVariation = () =>
     setVariations(v => [...v, { id: Date.now().toString(), name: "", price: "", amount: "" }]);
@@ -76,7 +116,7 @@ function ItemModal({
   const inputCls = "w-full bg-gray-100 rounded-2xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={handleClose}>
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
       <div
         className="relative w-full max-w-lg bg-white rounded-t-3xl overflow-y-auto shadow-2xl"
@@ -85,9 +125,9 @@ function ItemModal({
       >
         {/* Header */}
         <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <button className="text-indigo-400 text-sm font-semibold" onClick={onClose}>حفظ</button>
-          <h3 className="font-bold text-gray-900 text-base">صنف</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button className="text-indigo-400 text-sm font-semibold" onClick={handleSubmit}>حفظ</button>
+          <h3 className="font-bold text-gray-900 text-base">صنف جديد</h3>
+          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -231,13 +271,21 @@ function ItemModal({
             </div>
           </div>
 
+          {/* Error */}
+          {saveError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-2xl">
+              {saveError}
+            </div>
+          )}
+
           {/* Submit */}
           <button
-            onClick={onClose}
-            className="w-full py-4 rounded-2xl text-white font-bold text-base mt-2 hover:brightness-110 transition-all"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="w-full py-4 rounded-2xl text-white font-bold text-base mt-2 hover:brightness-110 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
             style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}
           >
-            إضافة
+            {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> جارٍ الإضافة...</> : "إضافة"}
           </button>
           <div className="h-2" />
         </div>
@@ -968,6 +1016,8 @@ export default function DashboardPage() {
         open={showAddItem}
         onClose={() => setShowAddItem(false)}
         categories={categories}
+        restaurantId={restaurant?.id ?? ""}
+        onAdd={(item) => setMenuItems(prev => [...prev, item])}
       />
     </div>
   );
