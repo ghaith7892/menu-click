@@ -127,11 +127,6 @@ export default function LandingPage() {
         {/* Phone + Buttons side by side */}
         <div className="flex flex-1 items-center justify-center gap-8 px-6 pb-10 flex-wrap">
 
-          {/* Phone mockup */}
-          <div className="flex-shrink-0">
-            <PhoneMockup />
-          </div>
-
           {/* CTA Buttons — stacked vertically beside phone */}
           <div className="flex flex-col gap-3 w-56">
             {/* Demo preview */}
@@ -166,6 +161,11 @@ export default function LandingPage() {
             </div>
 
             <p className="text-center text-white/50 text-xs">لا يلزم بطاقة ائتمان</p>
+          </div>
+
+          {/* Phone mockup */}
+          <div className="flex-shrink-0">
+            <PhoneMockup />
           </div>
         </div>
       </section>
