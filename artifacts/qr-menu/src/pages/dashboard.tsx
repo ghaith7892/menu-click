@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, UtensilsCrossed, QrCode, ShoppingBag,
-  Plus, Pencil, Trash2, Bell, LogOut,
+  Trash2, Bell, LogOut,
   CheckCircle2, Clock, ChefHat, Truck, X, Settings,
-  TrendingUp, Star, DollarSign, Table2, Eye, Loader2, Globe
+  TrendingUp, Star, DollarSign, Table2, Eye, Loader2, Globe,
+  Plus, Minus, Camera, Link2, Download, Pencil
 } from "lucide-react";
 import type { OrderStatus, CategoryRow, MenuItemRow, OrderRow, RestaurantRow } from "@/lib/database.types";
 import {
@@ -15,12 +16,242 @@ import { useAuth } from "@/context/auth-context";
 import { useLang, type Lang } from "@/context/lang-context";
 
 type Tab = "overview" | "menu" | "qr" | "orders" | "settings";
+type UnitType = "g" | "ml";
 
+interface Variation {
+  id: string;
+  name: string;
+  price: string;
+  amount: string;
+}
+
+/* ─── Toggle Switch ───────────────────────────────── */
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? "bg-indigo-500" : "bg-gray-200"}`}
+    >
+      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${value ? "left-6" : "left-0.5"}`} />
+    </button>
+  );
+}
+
+/* ─── Item Modal (Menusa style) ───────────────────── */
+function ItemModal({
+  open, onClose, categories,
+}: {
+  open: boolean;
+  onClose: () => void;
+  categories: CategoryRow[];
+}) {
+  const [selectedCat, setSelectedCat] = useState(categories[0]?.id ?? "");
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState<UnitType>("g");
+  const [variations, setVariations] = useState<Variation[]>([
+    { id: "1", name: "", price: "", amount: "" },
+  ]);
+  const [description, setDescription] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [hideFromMenu, setHideFromMenu] = useState(false);
+  const [outOfStock, setOutOfStock] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const addVariation = () =>
+    setVariations(v => [...v, { id: Date.now().toString(), name: "", price: "", amount: "" }]);
+
+  const removeVariation = (id: string) =>
+    setVariations(v => v.filter(x => x.id !== id));
+
+  const updateVariation = (id: string, field: keyof Variation, val: string) =>
+    setVariations(v => v.map(x => x.id === id ? { ...x, [field]: val } : x));
+
+  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setPhoto(URL.createObjectURL(file));
+  };
+
+  if (!open) return null;
+
+  const inputCls = "w-full bg-gray-100 rounded-2xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-lg bg-white rounded-t-3xl overflow-y-auto shadow-2xl"
+        style={{ maxHeight: "92vh" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <button className="text-indigo-400 text-sm font-semibold" onClick={onClose}>حفظ</button>
+          <h3 className="font-bold text-gray-900 text-base">صنف</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+
+          {/* Category selector */}
+          <div className="flex items-center justify-between bg-gray-100 rounded-2xl px-4 py-3.5">
+            <select
+              value={selectedCat}
+              onChange={e => setSelectedCat(e.target.value)}
+              className="bg-transparent text-sm text-gray-900 font-medium flex-1 focus:outline-none appearance-none"
+            >
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </select>
+            <span className="text-gray-400 text-sm">›</span>
+          </div>
+
+          {/* Name */}
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="الاسم"
+            className={inputCls}
+          />
+
+          {/* Variations */}
+          {variations.map((v, idx) => (
+            <div key={v.id} className="space-y-2">
+              <div className="flex gap-2 items-center">
+                {/* Price */}
+                <div className="flex-1">
+                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، ر.س</p>}
+                  <input
+                    type="number"
+                    value={v.price}
+                    onChange={e => updateVariation(v.id, "price", e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-gray-100 rounded-2xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                {/* Amount */}
+                <div className="flex-1">
+                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">الكمية، {unit === "g" ? "غرام" : "مل"}</p>}
+                  <input
+                    type="number"
+                    value={v.amount}
+                    onChange={e => updateVariation(v.id, "amount", e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-gray-100 rounded-2xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                {/* Unit toggle */}
+                {idx === 0 ? (
+                  <div className="mt-5">
+                    <button
+                      onClick={() => setUnit(u => u === "g" ? "ml" : "g")}
+                      className="w-10 h-10 rounded-2xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center flex-shrink-0"
+                    >
+                      {unit}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-0 flex items-center">
+                    <button
+                      onClick={() => removeVariation(v.id)}
+                      className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center flex-shrink-0"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              {/* Variation name */}
+              <input
+                value={v.name}
+                onChange={e => updateVariation(v.id, "name", e.target.value)}
+                placeholder={idx === 0 ? "صغير" : "كبير"}
+                className={inputCls}
+              />
+            </div>
+          ))}
+
+          {/* Add variation */}
+          <button
+            onClick={addVariation}
+            className="w-full bg-gray-100 rounded-2xl py-3.5 text-sm font-semibold text-indigo-600 hover:bg-gray-200 transition-colors"
+          >
+            + إضافة حجم / خيار
+          </button>
+
+          {/* Description */}
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="وصف شهي جداً..."
+            rows={3}
+            className={inputCls + " resize-none"}
+          />
+
+          {/* Photo upload */}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
+          {photo ? (
+            <div className="relative">
+              <img src={photo} className="w-36 h-28 rounded-2xl object-cover" />
+              <button
+                onClick={() => setPhoto(null)}
+                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="w-36 h-28 rounded-2xl flex flex-col items-center justify-center gap-1 text-indigo-600 font-semibold text-sm"
+              style={{ border: "2px dashed #6366f1" }}
+            >
+              <Plus className="w-5 h-5" />
+              <span className="text-xs leading-tight text-center">أضف<br/>صورة</span>
+            </button>
+          )}
+
+          {/* Toggles */}
+          <div className="space-y-3">
+            <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">إخفاء من المنيو</p>
+                <p className="text-xs text-gray-400 mt-0.5">سيظهر الصنف لك فقط</p>
+              </div>
+              <Toggle value={hideFromMenu} onChange={setHideFromMenu} />
+            </div>
+            <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">غير متوفر</p>
+                <p className="text-xs text-gray-400 mt-0.5">سيرى الضيوف أنه سيكون متاحاً لاحقاً</p>
+              </div>
+              <Toggle value={outOfStock} onChange={setOutOfStock} />
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            onClick={onClose}
+            className="w-full py-4 rounded-2xl text-white font-bold text-base mt-2 hover:brightness-110 transition-all"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}
+          >
+            إضافة
+          </button>
+          <div className="h-2" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main Dashboard ──────────────────────────────── */
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const { t, lang, setLang, dir } = useLang();
   const [, navigate] = useLocation();
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] = useState<Tab>("menu");
   const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
@@ -66,7 +297,6 @@ export default function DashboardPage() {
   };
 
   const handleLogout = () => { logout(); navigate("/login"); };
-
   const pendingCount = orders.filter(o => o.status === "pending").length;
 
   const advanceOrder = async (id: string) => {
@@ -88,9 +318,14 @@ export default function DashboardPage() {
     : menuItems.filter(i => i.category_id === selectedCategory);
 
   const tablesCount = restaurant?.tables_count ?? 5;
-
   const planLabel = (plan?: string) =>
     plan === "pro" ? t.planPro : plan === "enterprise" ? t.planEnterprise : t.planFree;
+
+  const handleSaveSettings = () => {
+    setLang(pendingLang);
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2500);
+  };
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "overview",  label: t.overview,  icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -99,32 +334,33 @@ export default function DashboardPage() {
     { id: "orders",    label: t.orders,    icon: <ShoppingBag className="w-5 h-5" />, badge: pendingCount },
   ];
 
-  const handleSaveSettings = () => {
-    setLang(pendingLang);
-    setSettingsSaved(true);
-    setTimeout(() => setSettingsSaved(false), 2500);
-  };
-
   if (dataLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex h-screen items-center justify-center bg-white">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
       </div>
     );
   }
 
+  const primaryStyle = { background: "linear-gradient(135deg, #7c3aed, #6366f1)" };
+
   return (
-    <div className="flex h-screen bg-background overflow-hidden font-sans" dir={dir}>
-      {/* Sidebar */}
-      <aside className={`w-64 bg-card border-border flex flex-col shrink-0 ${dir === "rtl" ? "border-l" : "border-r"}`}>
-        <div className="p-5 border-b border-border">
+    <div className="flex h-screen bg-gray-50 overflow-hidden font-sans" dir={dir}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); .font-sans { font-family: 'Cairo', sans-serif; }`}</style>
+
+      {/* ── Sidebar ── */}
+      <aside className={`w-60 bg-white flex flex-col shrink-0 border-gray-100 ${dir === "rtl" ? "border-l" : "border-r"}`}
+        style={{ borderWidth: 1 }}>
+        <div className="p-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-xl shadow-sm">
-              {restaurant?.logo ?? "🍽️"}
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl shadow-sm"
+              style={primaryStyle}>
+              <span className="text-white text-lg">{restaurant?.logo ?? "🍽️"}</span>
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-sm text-foreground truncate">{restaurant?.name ?? user?.restaurantName ?? "—"}</p>
-              <span className="text-xs bg-accent text-primary font-semibold px-2 py-0.5 rounded-full">
+              <p className="font-bold text-sm text-gray-900 truncate">{restaurant?.name ?? user?.restaurantName ?? "—"}</p>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                style={{ ...primaryStyle, fontSize: 10 }}>
                 {planLabel(restaurant?.plan ?? user?.plan)}
               </span>
             </div>
@@ -136,16 +372,19 @@ export default function DashboardPage() {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
                 activeTab === item.id
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  ? "text-white shadow-sm"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
               }`}
+              style={activeTab === item.id ? primaryStyle : {}}
             >
               {item.icon}
               <span className="flex-1 text-start">{item.label}</span>
               {item.badge ? (
-                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${activeTab === item.id ? "bg-white/30 text-white" : "bg-primary text-white"}`}>
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
+                  activeTab === item.id ? "bg-white/30 text-white" : "bg-indigo-100 text-indigo-600"
+                }`}>
                   {item.badge}
                 </span>
               ) : null}
@@ -153,21 +392,20 @@ export default function DashboardPage() {
           ))}
         </nav>
 
-        <div className="p-3 border-t border-border space-y-1">
+        <div className="p-3 border-t border-gray-100 space-y-1">
           <button
             onClick={() => setActiveTab("settings")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              activeTab === "settings"
-                ? "bg-primary text-white shadow-sm"
-                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
+              activeTab === "settings" ? "text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
             }`}
+            style={activeTab === "settings" ? primaryStyle : {}}
           >
             <Settings className="w-5 h-5" />
             <span className="flex-1 text-start">{t.settings}</span>
           </button>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold text-gray-500 hover:bg-red-50 hover:text-red-500 transition-all"
           >
             <LogOut className="w-5 h-5" />
             <span className="flex-1 text-start">{t.logout}</span>
@@ -175,48 +413,50 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* ── Main ── */}
       <main className="flex-1 flex flex-col overflow-hidden">
+
         {/* Header */}
-        <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
+        <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shrink-0">
           <div>
-            <h1 className="font-bold text-lg text-foreground">
+            <h1 className="font-bold text-lg text-gray-900">
               {activeTab === "settings" ? t.settings : navItems.find(n => n.id === activeTab)?.label}
             </h1>
-            <p className="text-xs text-muted-foreground">{t.welcome}، {user?.name ?? "—"} 👋</p>
+            <p className="text-xs text-gray-400">{t.welcome}، {user?.name ?? "—"} 👋</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
               <button
                 onClick={() => setNotifOpen(!notifOpen)}
-                className="relative w-9 h-9 rounded-xl border border-border bg-background flex items-center justify-center hover:bg-accent/50 transition-colors"
+                className="relative w-9 h-9 rounded-2xl border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors"
               >
-                <Bell className="w-4 h-4 text-muted-foreground" />
+                <Bell className="w-4 h-4 text-gray-400" />
                 {pendingCount > 0 && (
-                  <span className="absolute -top-1 -left-1 w-4 h-4 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -left-1 w-4 h-4 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
+                    style={primaryStyle}>
                     {pendingCount}
                   </span>
                 )}
               </button>
               {notifOpen && (
-                <div className={`absolute ${dir === "rtl" ? "left-0" : "right-0"} top-11 w-64 bg-card border border-border rounded-2xl shadow-lg z-50 overflow-hidden`}>
-                  <div className="p-3 border-b border-border">
-                    <p className="font-bold text-sm text-foreground">{t.notifications}</p>
+                <div className={`absolute ${dir === "rtl" ? "left-0" : "right-0"} top-11 w-64 bg-white border border-gray-100 rounded-3xl shadow-xl z-50 overflow-hidden`}>
+                  <div className="p-3 border-b border-gray-100">
+                    <p className="font-bold text-sm text-gray-900">{t.notifications}</p>
                   </div>
                   {orders.filter(o => o.status === "pending").map(o => (
-                    <div key={o.id} className="p-3 border-b border-border last:border-0 hover:bg-accent/30">
-                      <p className="text-sm font-medium text-foreground">{t.newOrder} {o.table_number}</p>
-                      <p className="text-xs text-muted-foreground">{(o.items as unknown[]).length} {t.items} • {o.total} {t.currency}</p>
+                    <div key={o.id} className="p-3 border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                      <p className="text-sm font-medium text-gray-900">{t.newOrder} {o.table_number}</p>
+                      <p className="text-xs text-gray-400">{(o.items as unknown[]).length} {t.items} • {o.total} {t.currency}</p>
                     </div>
                   ))}
                   {orders.filter(o => o.status === "pending").length === 0 && (
-                    <p className="p-4 text-sm text-muted-foreground text-center">—</p>
+                    <p className="p-4 text-sm text-gray-400 text-center">لا إشعارات</p>
                   )}
                 </div>
               )}
             </div>
             <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
-              <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground border border-border px-3 py-2 rounded-xl hover:bg-accent/50 transition-colors">
+              <button className="flex items-center gap-2 text-sm font-semibold text-gray-600 border border-gray-200 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors">
                 <Eye className="w-4 h-4" />
                 {t.previewMenu}
               </button>
@@ -226,43 +466,44 @@ export default function DashboardPage() {
 
         <div className="flex-1 overflow-y-auto p-6">
 
-          {/* OVERVIEW TAB */}
+          {/* ══ OVERVIEW TAB ══ */}
           {activeTab === "overview" && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                   { label: t.totalOrdersToday, value: "24",                 icon: <ShoppingBag className="w-5 h-5" />, color: "text-blue-600",   bg: "bg-blue-50" },
                   { label: t.revenueToday,      value: `1,840 ${t.currency}`, icon: <DollarSign className="w-5 h-5" />,  color: "text-green-600",  bg: "bg-green-50" },
-                  { label: t.avgOrderValue,     value: `76 ${t.currency}`,   icon: <TrendingUp className="w-5 h-5" />,   color: "text-primary",    bg: "bg-accent" },
+                  { label: t.avgOrderValue,     value: `76 ${t.currency}`,    icon: <TrendingUp className="w-5 h-5" />,  color: "text-indigo-600", bg: "bg-indigo-50" },
                   { label: t.activeTables,      value: `${orders.filter(o => o.status !== "delivered").length}/${tablesCount}`, icon: <Table2 className="w-5 h-5" />, color: "text-purple-600", bg: "bg-purple-50" },
                 ].map((stat, i) => (
-                  <div key={i} className="bg-card border border-border rounded-2xl p-5">
-                    <div className={`w-10 h-10 ${stat.bg} ${stat.color} rounded-xl flex items-center justify-center mb-3`}>
+                  <div key={i} className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
+                    <div className={`w-10 h-10 ${stat.bg} ${stat.color} rounded-2xl flex items-center justify-center mb-3`}>
                       {stat.icon}
                     </div>
-                    <p className="text-2xl font-black text-foreground">{stat.value}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                    <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+                    <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                <div className="p-5 border-b border-border flex items-center justify-between">
-                  <h2 className="font-bold text-foreground">{t.recentOrders}</h2>
-                  <button onClick={() => setActiveTab("orders")} className="text-xs text-primary font-medium hover:underline">{t.viewAll}</button>
+              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                  <h2 className="font-bold text-gray-900">{t.recentOrders}</h2>
+                  <button onClick={() => setActiveTab("orders")} className="text-xs font-semibold text-indigo-600 hover:underline">{t.viewAll}</button>
                 </div>
-                <div className="divide-y divide-border">
+                <div className="divide-y divide-gray-100">
                   {orders.slice(0, 4).map(order => {
                     const cfg = STATUS_CONFIG[order.status];
                     return (
                       <div key={order.id} className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-accent rounded-xl flex items-center justify-center font-bold text-sm text-primary">
+                          <div className="w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-sm text-white"
+                            style={primaryStyle}>
                             {order.table_number}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-foreground">{t.table} {order.table_number}</p>
-                            <p className="text-xs text-muted-foreground">{(order.items as unknown[]).length} {t.itemsCount} • {order.total} {t.currency}</p>
+                            <p className="text-sm font-semibold text-gray-900">{t.table} {order.table_number}</p>
+                            <p className="text-xs text-gray-400">{(order.items as unknown[]).length} {t.itemsCount} • {order.total} {t.currency}</p>
                           </div>
                         </div>
                         <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.color}`}>
@@ -271,150 +512,239 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
-                  {orders.length === 0 && (
-                    <p className="p-6 text-center text-sm text-muted-foreground">—</p>
-                  )}
+                  {orders.length === 0 && <p className="p-6 text-center text-sm text-gray-400">—</p>}
                 </div>
               </div>
 
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                <div className="p-5 border-b border-border">
-                  <h2 className="font-bold text-foreground">{t.topItems}</h2>
+              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-100">
+                  <h2 className="font-bold text-gray-900">{t.topItems}</h2>
                 </div>
                 <div className="p-4 space-y-3">
                   {menuItems.filter(i => i.is_popular).slice(0, 5).map((item, idx) => (
                     <div key={item.id} className="flex items-center gap-3">
                       <span className="text-lg w-8 text-center">{item.image ?? "🍽️"}</span>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-foreground">{item.name}</p>
+                        <p className="text-sm font-medium text-gray-900">{item.name}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full bg-primary rounded-full" style={{ width: `${85 - idx * 15}%` }} />
+                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${85 - idx * 15}%`, ...primaryStyle }} />
                           </div>
-                          <span className="text-xs text-muted-foreground">{85 - idx * 15}%</span>
+                          <span className="text-xs text-gray-400">{85 - idx * 15}%</span>
                         </div>
                       </div>
-                      <Star className="w-4 h-4 fill-primary text-primary" />
+                      <Star className="w-4 h-4 fill-indigo-500 text-indigo-500" />
                     </div>
                   ))}
                   {menuItems.filter(i => i.is_popular).length === 0 && (
-                    <p className="text-center text-sm text-muted-foreground py-4">—</p>
+                    <p className="text-center text-sm text-gray-400 py-4">—</p>
                   )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* MENU TAB */}
+          {/* ══ MENU TAB (Menusa style) ══ */}
           {activeTab === "menu" && (
-            <div className="space-y-5">
-              <div className="bg-card border border-border rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-sm text-foreground">{t.categories}</h3>
-                  <button className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:bg-accent/50 px-3 py-1.5 rounded-lg transition-colors">
-                    <Plus className="w-3.5 h-3.5" /> {t.newCategory}
-                  </button>
+            <div className="max-w-2xl space-y-0">
+
+              {/* Cover photo */}
+              <div className="relative h-44 rounded-3xl overflow-hidden mb-4 bg-gray-200 group cursor-pointer"
+                style={{ background: restaurant?.cover_color ?? "linear-gradient(135deg, #e0e7ff, #c7d2fe)" }}>
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+                  <div className="bg-white/90 rounded-2xl px-4 py-2 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                    <Camera className="w-4 h-4" /> تغيير الغلاف
+                  </div>
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => setSelectedCategory("all")}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${selectedCategory === "all" ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-accent/60"}`}
-                  >
-                    {t.all} ({menuItems.length})
-                  </button>
-                  {categories.map(cat => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${selectedCategory === cat.id ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-accent/60"}`}
-                    >
-                      <span>{cat.icon}</span>
-                      {cat.name} ({menuItems.filter(i => i.category_id === cat.id).length})
-                    </button>
-                  ))}
+                <div className="absolute bottom-3 right-3">
+                  <div className="w-10 h-10 rounded-2xl bg-white/80 backdrop-blur flex items-center justify-center text-lg shadow">
+                    {restaurant?.logo ?? "🍽️"}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">{filteredItems.length} {t.itemsCount}</p>
+              {/* Category pills */}
+              <div className="flex gap-2 flex-wrap mb-5">
+                {/* Edit icon pill */}
+                <button className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
+                  <Pencil className="w-4 h-4 text-white" />
+                </button>
+                {/* All pill */}
                 <button
-                  onClick={() => setShowAddItem(true)}
-                  className="flex items-center gap-2 bg-primary text-white font-semibold text-sm px-4 py-2 rounded-xl hover:brightness-110 transition-all shadow-sm"
+                  onClick={() => setSelectedCategory("all")}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+                    selectedCategory === "all"
+                      ? "bg-gray-900 text-white"
+                      : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"
+                  }`}
                 >
-                  <Plus className="w-4 h-4" /> {t.addItem}
+                  {t.all}
+                </button>
+                {categories.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+                      selectedCategory === cat.id
+                        ? "bg-gray-900 text-white"
+                        : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    {cat.icon} {cat.name}
+                  </button>
+                ))}
+                {/* Dashed add category */}
+                <button className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-indigo-600 transition-all"
+                  style={{ border: "2px dashed #6366f1" }}>
+                  <Plus className="w-3.5 h-3.5" /> {t.newCategory}
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredItems.map(item => {
-                  const cat = categories.find(c => c.id === item.category_id);
-                  return (
-                    <div key={item.id} className="bg-card border border-border rounded-2xl p-4 flex gap-3 hover:border-primary/30 transition-all group">
-                      <div className="w-16 h-16 bg-accent rounded-xl flex items-center justify-center text-2xl shrink-0">
-                        {item.image ?? "🍽️"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-bold text-sm text-foreground truncate">{item.name}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.description}</p>
-                          </div>
-                          <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-muted-foreground hover:text-primary transition-colors">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
+              {/* Section header */}
+              {categories.filter(c => selectedCategory === "all" || c.id === selectedCategory).map(cat => {
+                const catItems = menuItems.filter(i => i.category_id === cat.id);
+                return (
+                  <div key={cat.id} className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-black text-gray-900 text-lg">{cat.icon} {cat.name}</h3>
+                      <button
+                        onClick={() => setShowAddItem(true)}
+                        className="w-9 h-9 rounded-2xl bg-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors"
+                      >
+                        <Plus className="w-5 h-5 text-white" />
+                      </button>
+                    </div>
+
+                    {/* 2-col product grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {catItems.map(item => (
+                        <div key={item.id}
+                          className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group cursor-pointer hover:border-indigo-200 transition-all">
+                          {/* Image */}
+                          <div className="relative h-32 bg-gray-100 flex items-center justify-center text-4xl">
+                            {item.image
+                              ? <img src={item.image} className="w-full h-full object-cover" />
+                              : <span>{item.image ?? "🍽️"}</span>
+                            }
+                            {/* Delete on hover */}
                             <button
                               onClick={() => handleDeleteItem(item.id)}
-                              className="w-7 h-7 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive/70 hover:text-destructive transition-colors"
+                              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-sm font-black text-primary">{item.price} {t.currency}</span>
-                          <div className="flex items-center gap-1.5">
-                            {item.is_popular && <span className="text-xs bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">🔥 {t.popular}</span>}
-                            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{cat?.icon} {cat?.name}</span>
+                          {/* Info */}
+                          <div className="p-3">
+                            <p className="text-sm font-black text-gray-900">من {item.price} {t.currency}</p>
+                            <p className="text-xs text-gray-500 mt-0.5 truncate">{item.name}</p>
+                            {item.is_popular && (
+                              <p className="text-[10px] text-gray-400 mt-1">🔥 {t.popular}</p>
+                            )}
                           </div>
                         </div>
-                      </div>
+                      ))}
+
+                      {/* Add item dashed card */}
+                      <button
+                        onClick={() => setShowAddItem(true)}
+                        className="h-52 rounded-3xl flex flex-col items-center justify-center gap-2 text-indigo-600 font-semibold text-sm hover:bg-indigo-50 transition-colors"
+                        style={{ border: "2px dashed #6366f1" }}
+                      >
+                        <Plus className="w-6 h-6" />
+                        <span>{t.addItem}</span>
+                      </button>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
+
+              {/* If no categories yet */}
+              {categories.length === 0 && (
+                <div className="text-center py-16">
+                  <button
+                    onClick={() => setShowAddItem(true)}
+                    className="h-40 w-full rounded-3xl flex flex-col items-center justify-center gap-2 text-indigo-600 font-semibold text-sm"
+                    style={{ border: "2px dashed #6366f1" }}
+                  >
+                    <Plus className="w-8 h-8" />
+                    <span>{t.addItem}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Preview floating button */}
+              <div className={`fixed bottom-8 ${dir === "rtl" ? "left-8" : "right-8"} z-40`}>
+                <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
+                  <button className="flex items-center gap-2 bg-white border border-gray-200 text-gray-800 font-semibold text-sm px-5 py-3 rounded-full shadow-lg hover:shadow-xl transition-all">
+                    <Eye className="w-4 h-4" />
+                    معاينة
+                  </button>
+                </Link>
               </div>
             </div>
           )}
 
-          {/* QR TAB */}
+          {/* ══ QR TAB (Menusa style) ══ */}
           {activeTab === "qr" && (
-            <div className="space-y-6">
-              <div className="bg-card border border-border rounded-2xl p-6">
-                <div className="flex items-start justify-between mb-6">
-                  <div>
-                    <h3 className="font-bold text-foreground mb-1">{t.restaurantQr}</h3>
-                    <p className="text-sm text-muted-foreground">{t.restaurantQrDesc}</p>
+            <div className="max-w-xl space-y-6">
+
+              {/* Main QR card */}
+              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+                <div className="p-6">
+                  <h3 className="font-bold text-gray-900 mb-1">{t.restaurantQr}</h3>
+                  <p className="text-sm text-gray-400 mb-5">{t.restaurantQrDesc}</p>
+
+                  <div className="flex items-center justify-center py-8 bg-gray-50 rounded-3xl mb-5">
+                    <div className="bg-white p-6 rounded-3xl shadow-md text-center">
+                      <QrCode className="w-28 h-28 text-gray-900 mx-auto" />
+                      <p className="mt-3 text-sm font-bold text-gray-900">{restaurant?.name ?? "—"}</p>
+                      <p className="text-xs text-gray-400 mt-1">{t.scanToView}</p>
+                    </div>
                   </div>
-                  <button className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl hover:brightness-110 transition-all">
-                    {t.downloadQr}
-                  </button>
-                </div>
-                <div className="flex items-center justify-center py-8 bg-muted/40 rounded-2xl">
-                  <div className="bg-white p-6 rounded-2xl shadow-md text-center">
-                    <QrCode className="w-32 h-32 text-foreground mx-auto" />
-                    <p className="mt-3 text-sm font-bold text-foreground">{restaurant?.name ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{t.scanToView}</p>
+
+                  {/* Restaurant info card (Menusa preview) */}
+                  <div className="bg-gray-50 rounded-2xl p-4 mb-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl"
+                        style={primaryStyle}>
+                        {restaurant?.logo ?? "🍽️"}
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-gray-900">{restaurant?.name ?? "—"}</p>
+                        <p className="text-xs text-gray-400">08:00 — 21:00</p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-400 flex items-center gap-1">
+                      <span>📷</span>
+                      <span>@{restaurant?.name?.toLowerCase().replace(/\s/g, "") ?? "restaurant"}</span>
+                    </div>
+                  </div>
+
+                  {/* Two action buttons */}
+                  <div className="flex gap-3">
+                    <button className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors">
+                      <Link2 className="w-4 h-4" />
+                      {t.copyLink}
+                    </button>
+                    <button className="flex-1 flex items-center justify-center gap-2 text-white font-bold py-4 rounded-2xl text-sm hover:brightness-110 transition-all"
+                      style={primaryStyle}>
+                      <QrCode className="w-4 h-4" />
+                      {t.downloadQr}
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                <div className="p-5 border-b border-border flex items-center justify-between">
+              {/* Table QRs */}
+              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
                   <div>
-                    <h3 className="font-bold text-foreground">{t.tableQrs}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{tablesCount} {t.tableLabel}</p>
+                    <h3 className="font-bold text-gray-900">{t.tableQrs}</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">{tablesCount} {t.tableLabel}</p>
                   </div>
-                  <button className="flex items-center gap-2 text-sm font-semibold text-primary border border-primary/30 px-3 py-2 rounded-xl hover:bg-accent transition-all">
+                  <button className="flex items-center gap-2 text-sm font-semibold text-indigo-600 border border-indigo-200 px-3 py-2 rounded-2xl hover:bg-indigo-50 transition-all">
+                    <Download className="w-4 h-4" />
                     {t.downloadAll}
                   </button>
                 </div>
@@ -424,30 +754,35 @@ export default function DashboardPage() {
                       key={table}
                       onClick={() => setSelectedQrTable(selectedQrTable === table ? null : table)}
                       className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
-                        selectedQrTable === table ? "border-primary bg-accent shadow-sm" : "border-border bg-background hover:border-primary/40"
+                        selectedQrTable === table ? "border-indigo-400 bg-indigo-50 shadow-sm" : "border-gray-100 bg-white hover:border-indigo-200"
                       }`}
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedQrTable === table ? "bg-primary" : "bg-muted"}`}>
-                        <QrCode className={`w-5 h-5 ${selectedQrTable === table ? "text-white" : "text-muted-foreground"}`} />
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${selectedQrTable === table ? "" : "bg-gray-100"}`}
+                        style={selectedQrTable === table ? primaryStyle : {}}>
+                        <QrCode className={`w-5 h-5 ${selectedQrTable === table ? "text-white" : "text-gray-400"}`} />
                       </div>
-                      <span className="text-xs font-bold text-foreground">{t.tableLabel} {table}</span>
+                      <span className="text-xs font-bold text-gray-700">{t.tableLabel} {table}</span>
                     </button>
                   ))}
                 </div>
                 {selectedQrTable && (
-                  <div className="border-t border-border p-5 bg-accent/30">
-                    <div className="flex items-center gap-6">
+                  <div className="border-t border-gray-100 p-5 bg-gray-50">
+                    <div className="flex items-center gap-5 mb-4">
                       <div className="bg-white p-4 rounded-2xl shadow-sm">
-                        <QrCode className="w-20 h-20 text-foreground" />
+                        <QrCode className="w-20 h-20 text-gray-900" />
                       </div>
                       <div>
-                        <p className="font-bold text-foreground mb-1">{restaurant?.name ?? "—"} — {t.tableLabel} {selectedQrTable}</p>
-                        <p className="text-sm text-muted-foreground mb-4">{t.link}: /menu/{restaurant?.id}?table={selectedQrTable}</p>
-                        <div className="flex gap-2">
-                          <button className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl hover:brightness-110 transition-all">{t.downloadPng}</button>
-                          <button className="border border-border text-sm font-medium text-foreground px-4 py-2 rounded-xl hover:bg-card transition-all">{t.copyLink}</button>
-                        </div>
+                        <p className="font-bold text-gray-900 mb-1">{restaurant?.name ?? "—"} — {t.tableLabel} {selectedQrTable}</p>
+                        <p className="text-sm text-gray-400">/menu/{restaurant?.id}?table={selectedQrTable}</p>
                       </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <button className="flex-1 bg-gray-900 text-white text-sm font-bold py-3 rounded-2xl hover:bg-gray-800 transition-colors">
+                        {t.downloadPng}
+                      </button>
+                      <button className="flex-1 border border-gray-200 text-sm font-semibold text-gray-700 py-3 rounded-2xl hover:bg-gray-100 transition-colors">
+                        {t.copyLink}
+                      </button>
                     </div>
                   </div>
                 )}
@@ -455,21 +790,23 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ORDERS TAB */}
+          {/* ══ ORDERS TAB ══ */}
           {activeTab === "orders" && (
             <div className="space-y-4">
               <div className="flex gap-2 flex-wrap">
                 {(["all", "pending", "preparing", "ready", "delivered"] as const).map(s => (
                   <button
                     key={s}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
-                      s === "all"
-                        ? "bg-primary text-white border-primary"
-                        : s === "pending" ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                        : s === "preparing" ? "border-blue-200 bg-blue-50 text-blue-700"
-                        : s === "ready" ? "border-green-200 bg-green-50 text-green-700"
-                        : "border-border bg-muted text-muted-foreground"
+                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border ${
+                      s === "all" ? "border-transparent text-white" : ""
+                    } ${
+                      s === "pending" ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+                      : s === "preparing" ? "border-blue-200 bg-blue-50 text-blue-700"
+                      : s === "ready" ? "border-green-200 bg-green-50 text-green-700"
+                      : s === "delivered" ? "border-gray-200 bg-gray-100 text-gray-500"
+                      : ""
                     }`}
+                    style={s === "all" ? primaryStyle : {}}
                   >
                     {s === "all"
                       ? `${t.statusAll} (${orders.length})`
@@ -483,15 +820,18 @@ export default function DashboardPage() {
                 {orders.map(order => {
                   const cfg = STATUS_CONFIG[order.status];
                   return (
-                    <div key={order.id} className={`bg-card border rounded-2xl p-5 transition-all ${order.status === "pending" ? "border-primary/40 shadow-sm" : "border-border"}`}>
+                    <div key={order.id} className={`bg-white border rounded-3xl p-5 transition-all shadow-sm ${
+                      order.status === "pending" ? "border-indigo-200" : "border-gray-100"
+                    }`}>
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center font-black text-lg text-primary">
+                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white"
+                            style={primaryStyle}>
                             {order.table_number}
                           </div>
                           <div>
-                            <p className="font-bold text-foreground">{t.tableNo} {order.table_number}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="font-bold text-gray-900">{t.tableNo} {order.table_number}</p>
+                            <p className="text-xs text-gray-400">
                               {new Date(order.created_at).toLocaleTimeString(lang === "ar" ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
@@ -504,21 +844,22 @@ export default function DashboardPage() {
                         {(order.items as { item_id: string; item_name: string; price: number; quantity: number }[]).map((line, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-sm">
                             <span className="text-base">🍽️</span>
-                            <span className="flex-1 text-foreground">{line.item_name}</span>
-                            <span className="text-muted-foreground">×{line.quantity}</span>
-                            <span className="font-semibold text-foreground">{(line.price * line.quantity).toFixed(2)} {t.currency}</span>
+                            <span className="flex-1 text-gray-700">{line.item_name}</span>
+                            <span className="text-gray-400">×{line.quantity}</span>
+                            <span className="font-semibold text-gray-900">{(line.price * line.quantity).toFixed(2)} {t.currency}</span>
                           </div>
                         ))}
                       </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-border">
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                         <div>
-                          <span className="text-xs text-muted-foreground">{t.total}: </span>
-                          <span className="font-black text-primary">{order.total} {t.currency}</span>
+                          <span className="text-xs text-gray-400">{t.total}: </span>
+                          <span className="font-black text-indigo-600">{order.total} {t.currency}</span>
                         </div>
                         {cfg.next && (
                           <button
                             onClick={() => advanceOrder(order.id)}
-                            className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl hover:brightness-110 transition-all"
+                            className="text-white text-sm font-bold px-4 py-2 rounded-2xl hover:brightness-110 transition-all"
+                            style={primaryStyle}
                           >
                             {cfg.nextLabel}
                           </button>
@@ -529,27 +870,26 @@ export default function DashboardPage() {
                 })}
                 {orders.length === 0 && (
                   <div className="text-center py-16">
-                    <ShoppingBag className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-muted-foreground">—</p>
+                    <ShoppingBag className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-400">لا طلبات حالياً</p>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* SETTINGS TAB */}
+          {/* ══ SETTINGS TAB ══ */}
           {activeTab === "settings" && (
-            <div className="max-w-xl space-y-6">
-
-              {/* Language card */}
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                <div className="p-5 border-b border-border flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Globe className="w-5 h-5 text-primary" />
+            <div className="max-w-xl space-y-4">
+              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-2xl flex items-center justify-center"
+                    style={{ background: "#eef2ff" }}>
+                    <Globe className="w-5 h-5 text-indigo-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-foreground">{t.languageSection}</p>
-                    <p className="text-xs text-muted-foreground">{t.languageDesc}</p>
+                    <p className="font-bold text-sm text-gray-900">{t.languageSection}</p>
+                    <p className="text-xs text-gray-400">{t.languageDesc}</p>
                   </div>
                 </div>
                 <div className="p-5 space-y-3">
@@ -557,25 +897,23 @@ export default function DashboardPage() {
                     <label
                       key={l}
                       onClick={() => setPendingLang(l)}
-                      className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        pendingLang === l
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/30 hover:bg-accent/30"
+                      className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                        pendingLang === l ? "border-indigo-500 bg-indigo-50" : "border-gray-100 hover:border-gray-200"
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{l === "ar" ? "🇸🇦" : "🇺🇸"}</span>
                         <div>
-                          <p className="font-semibold text-sm text-foreground">
+                          <p className="font-semibold text-sm text-gray-900">
                             {l === "ar" ? t.arabic : t.english}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-gray-400">
                             {l === "ar" ? "RTL — من اليمين لليسار" : "LTR — Left to right"}
                           </p>
                         </div>
                       </div>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                        pendingLang === l ? "border-primary bg-primary" : "border-border"
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        pendingLang === l ? "border-indigo-500 bg-indigo-500" : "border-gray-300"
                       }`}>
                         {pendingLang === l && <div className="w-2 h-2 rounded-full bg-white" />}
                       </div>
@@ -585,92 +923,52 @@ export default function DashboardPage() {
                 <div className="px-5 pb-5">
                   <button
                     onClick={handleSaveSettings}
-                    className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:brightness-110 transition-all shadow-sm"
+                    className="w-full text-white font-bold py-3.5 rounded-2xl hover:brightness-110 transition-all"
+                    style={primaryStyle}
                   >
                     {settingsSaved ? t.settingsSaved : t.saveSettings}
                   </button>
                 </div>
               </div>
 
-              {/* Restaurant info card */}
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                <div className="p-5 border-b border-border flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-xl">
+              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-xl bg-gray-50">
                     {restaurant?.logo ?? "🍽️"}
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-foreground">{t.restaurantInfo}</p>
-                    <p className="text-xs text-muted-foreground">{t.restaurantInfoDesc}</p>
+                    <p className="font-bold text-sm text-gray-900">{t.restaurantInfo}</p>
+                    <p className="text-xs text-gray-400">{t.restaurantInfoDesc}</p>
                   </div>
                 </div>
                 <div className="p-5 space-y-3">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">{lang === "ar" ? "الاسم" : "Name"}</span>
-                    <span className="font-semibold text-foreground">{restaurant?.name ?? "—"}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">{lang === "ar" ? "الباقة" : "Plan"}</span>
-                    <span className="font-semibold text-foreground">{planLabel(restaurant?.plan)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">{lang === "ar" ? "عدد الطاولات" : "Tables"}</span>
-                    <span className="font-semibold text-foreground">{restaurant?.tables_count ?? "—"}</span>
-                  </div>
-                  <button className="w-full mt-2 border border-border text-foreground font-semibold py-2.5 rounded-xl hover:bg-accent/50 transition-all text-sm">
+                  {[
+                    { label: lang === "ar" ? "الاسم" : "Name", value: restaurant?.name ?? "—" },
+                    { label: lang === "ar" ? "الباقة" : "Plan", value: planLabel(restaurant?.plan) },
+                    { label: lang === "ar" ? "عدد الطاولات" : "Tables", value: String(restaurant?.tables_count ?? "—") },
+                  ].map((row, i) => (
+                    <div key={i} className="flex justify-between items-center text-sm py-1">
+                      <span className="text-gray-400">{row.label}</span>
+                      <span className="font-semibold text-gray-900">{row.value}</span>
+                    </div>
+                  ))}
+                  <button className="w-full mt-2 border border-gray-200 text-gray-700 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-all text-sm">
                     {t.editInfo}
                   </button>
                 </div>
               </div>
-
             </div>
           )}
 
         </div>
       </main>
 
-      {/* Add item modal */}
-      {showAddItem && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl w-full max-w-md shadow-2xl">
-            <div className="p-5 border-b border-border flex items-center justify-between">
-              <h3 className="font-bold text-foreground">{t.addNewItem}</h3>
-              <button onClick={() => setShowAddItem(false)} className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center hover:bg-accent transition-colors">
-                <X className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-foreground block mb-1.5">{t.itemName} *</label>
-                <input className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" placeholder={t.itemNamePlaceholder} />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-foreground block mb-1.5">{t.description}</label>
-                <textarea className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none" rows={2} placeholder={t.descriptionPlaceholder} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-foreground block mb-1.5">{t.price} ({t.currency}) *</label>
-                  <input type="number" className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" placeholder="0" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-foreground block mb-1.5">{t.section} *</label>
-                  <select className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all">
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowAddItem(false)} className="flex-1 border border-border text-foreground font-semibold py-2.5 rounded-xl hover:bg-accent/50 transition-all text-sm">
-                  {t.cancel}
-                </button>
-                <button onClick={() => setShowAddItem(false)} className="flex-1 bg-primary text-white font-semibold py-2.5 rounded-xl hover:brightness-110 transition-all text-sm">
-                  {t.add}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Item Modal ── */}
+      <ItemModal
+        open={showAddItem}
+        onClose={() => setShowAddItem(false)}
+        categories={categories}
+      />
     </div>
   );
 }
