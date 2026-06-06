@@ -119,9 +119,9 @@ export default function LandingPage() {
         {/* Headline */}
         <div className="text-center pt-10 pb-6 px-6">
           <h1 className="text-4xl font-black text-white leading-tight">
-            مجاني تماماً
+            منيو رقمي احترافي لمطعمك
           </h1>
-          <p className="text-white/70 text-sm mt-2">منيو رقمي احترافي لمطعمك — بدون تطبيق</p>
+          <p className="text-white/70 text-sm mt-2">بدون تطبيق — يفتح مباشرة من الهاتف</p>
         </div>
 
         {/* Phone + Buttons side by side */}
