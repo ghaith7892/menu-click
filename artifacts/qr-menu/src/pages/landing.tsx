@@ -124,45 +124,49 @@ export default function LandingPage() {
           <p className="text-white/70 text-sm mt-2">منيو رقمي احترافي لمطعمك — بدون تطبيق</p>
         </div>
 
-        {/* Phone mockup */}
-        <div className="flex justify-center px-4 flex-1 items-center">
-          <PhoneMockup />
-        </div>
+        {/* Phone + Buttons side by side */}
+        <div className="flex flex-1 items-center justify-center gap-8 px-6 pb-10 flex-wrap">
 
-        {/* CTA Buttons — stacked vertically */}
-        <div className="px-6 pb-4 pt-8 max-w-md mx-auto w-full space-y-3">
-          {/* Demo preview */}
-          <Link href="/menu/demo" className="block">
-            <button className="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 shadow-lg">
-              <Eye className="w-4 h-4" />
-              معاينة تجريبية
-            </button>
-          </Link>
-
-          {/* QR preview */}
-          <Link href="/register" className="block">
-            <button className="w-full text-white font-bold py-4 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
-              style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}>
-              <QrCode className="w-4 h-4" />
-              معاينة QR
-            </button>
-          </Link>
-
-          {/* Main CTA */}
-          <Link href="/register" className="block">
-            <button className="w-full bg-white text-gray-900 font-bold py-4 rounded-2xl text-sm hover:bg-gray-50 transition-colors shadow-xl">
-              أنشئ منيو مجاناً
-            </button>
-          </Link>
-
-          {/* Slide dots */}
-          <div className="flex justify-center gap-1.5 pt-3">
-            {[0,1,2,3].map(i=>(
-              <div key={i} className={`rounded-full transition-all ${i===3?"bg-white w-5 h-1.5":"bg-white/40 w-1.5 h-1.5"}`} />
-            ))}
+          {/* Phone mockup */}
+          <div className="flex-shrink-0">
+            <PhoneMockup />
           </div>
 
-          <p className="text-center text-white/50 text-xs pb-4">لا يلزم بطاقة ائتمان</p>
+          {/* CTA Buttons — stacked vertically beside phone */}
+          <div className="flex flex-col gap-3 w-56">
+            {/* Demo preview */}
+            <Link href="/menu/demo" className="block">
+              <button className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-2xl text-sm hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 shadow-lg">
+                <Eye className="w-4 h-4" />
+                معاينة تجريبية
+              </button>
+            </Link>
+
+            {/* QR preview */}
+            <Link href="/register" className="block">
+              <button className="w-full text-white font-bold py-3.5 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
+                style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}>
+                <QrCode className="w-4 h-4" />
+                معاينة QR
+              </button>
+            </Link>
+
+            {/* Main CTA */}
+            <Link href="/register" className="block">
+              <button className="w-full bg-white text-gray-900 font-bold py-3.5 rounded-2xl text-sm hover:bg-gray-50 transition-colors shadow-xl">
+                أنشئ منيو مجاناً
+              </button>
+            </Link>
+
+            {/* Slide dots */}
+            <div className="flex justify-center gap-1.5 pt-1">
+              {[0,1,2,3].map(i=>(
+                <div key={i} className={`rounded-full transition-all ${i===3?"bg-white w-5 h-1.5":"bg-white/40 w-1.5 h-1.5"}`} />
+              ))}
+            </div>
+
+            <p className="text-center text-white/50 text-xs">لا يلزم بطاقة ائتمان</p>
+          </div>
         </div>
       </section>
 
