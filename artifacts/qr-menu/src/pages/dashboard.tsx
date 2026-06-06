@@ -3,7 +3,7 @@ import {
   LayoutDashboard, UtensilsCrossed, QrCode, ShoppingBag,
   Plus, Pencil, Trash2, Bell, LogOut,
   CheckCircle2, Clock, ChefHat, Truck, X, Settings,
-  TrendingUp, Star, DollarSign, Table2, Eye, Loader2
+  TrendingUp, Star, DollarSign, Table2, Eye, Loader2, Globe
 } from "lucide-react";
 import type { OrderStatus, CategoryRow, MenuItemRow, OrderRow, RestaurantRow } from "@/lib/database.types";
 import {
@@ -12,18 +12,13 @@ import {
 } from "@/lib/api";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/auth-context";
+import { useLang, type Lang } from "@/context/lang-context";
 
-type Tab = "overview" | "menu" | "qr" | "orders";
-
-const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; icon: React.ReactNode; next?: OrderStatus; nextLabel?: string }> = {
-  pending:   { label: "انتظار",   color: "bg-yellow-100 text-yellow-700 border-yellow-200",  icon: <Clock className="w-3.5 h-3.5" />,       next: "preparing", nextLabel: "بدء التحضير" },
-  preparing: { label: "يُحضَّر",  color: "bg-blue-100 text-blue-700 border-blue-200",        icon: <ChefHat className="w-3.5 h-3.5" />,      next: "ready",     nextLabel: "جاهز للتسليم" },
-  ready:     { label: "جاهز",    color: "bg-green-100 text-green-700 border-green-200",      icon: <CheckCircle2 className="w-3.5 h-3.5" />, next: "delivered", nextLabel: "تم التسليم" },
-  delivered: { label: "سُلِّم",  color: "bg-gray-100 text-gray-500 border-gray-200",         icon: <Truck className="w-3.5 h-3.5" /> },
-};
+type Tab = "overview" | "menu" | "qr" | "orders" | "settings";
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
+  const { t, lang, setLang, dir } = useLang();
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
@@ -35,6 +30,10 @@ export default function DashboardPage() {
   const [showAddItem, setShowAddItem] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState<number | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [pendingLang, setPendingLang] = useState<Lang>(lang);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  useEffect(() => { setPendingLang(lang); }, [lang]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -58,6 +57,13 @@ export default function DashboardPage() {
     })();
     return () => unsubscribe?.();
   }, [user?.id]);
+
+  const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; icon: React.ReactNode; next?: OrderStatus; nextLabel?: string }> = {
+    pending:   { label: t.pending,         color: "bg-yellow-100 text-yellow-700 border-yellow-200",  icon: <Clock className="w-3.5 h-3.5" />,       next: "preparing", nextLabel: t.startPrep },
+    preparing: { label: t.preparing,       color: "bg-blue-100 text-blue-700 border-blue-200",        icon: <ChefHat className="w-3.5 h-3.5" />,      next: "ready",     nextLabel: t.readyToDeliver },
+    ready:     { label: t.ready,           color: "bg-green-100 text-green-700 border-green-200",      icon: <CheckCircle2 className="w-3.5 h-3.5" />, next: "delivered", nextLabel: t.delivered },
+    delivered: { label: t.deliveredStatus, color: "bg-gray-100 text-gray-500 border-gray-200",         icon: <Truck className="w-3.5 h-3.5" /> },
+  };
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
@@ -83,26 +89,43 @@ export default function DashboardPage() {
 
   const tablesCount = restaurant?.tables_count ?? 5;
 
+  const planLabel = (plan?: string) =>
+    plan === "pro" ? t.planPro : plan === "enterprise" ? t.planEnterprise : t.planFree;
+
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "overview", label: "نظرة عامة",   icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: "menu",     label: "إدارة المنيو", icon: <UtensilsCrossed className="w-5 h-5" /> },
-    { id: "qr",       label: "أكواد QR",     icon: <QrCode className="w-5 h-5" /> },
-    { id: "orders",   label: "الطلبات",      icon: <ShoppingBag className="w-5 h-5" />, badge: pendingCount },
+    { id: "overview",  label: t.overview,  icon: <LayoutDashboard className="w-5 h-5" /> },
+    { id: "menu",      label: t.menuMgmt,  icon: <UtensilsCrossed className="w-5 h-5" /> },
+    { id: "qr",        label: t.qrCodes,   icon: <QrCode className="w-5 h-5" /> },
+    { id: "orders",    label: t.orders,    icon: <ShoppingBag className="w-5 h-5" />, badge: pendingCount },
   ];
 
+  const handleSaveSettings = () => {
+    setLang(pendingLang);
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2500);
+  };
+
+  if (dataLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-background overflow-hidden font-sans" dir="rtl">
+    <div className="flex h-screen bg-background overflow-hidden font-sans" dir={dir}>
       {/* Sidebar */}
-      <aside className="w-64 bg-card border-l border-border flex flex-col shrink-0">
+      <aside className={`w-64 bg-card border-border flex flex-col shrink-0 ${dir === "rtl" ? "border-l" : "border-r"}`}>
         <div className="p-5 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-xl shadow-sm">
               {restaurant?.logo ?? "🍽️"}
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-sm text-foreground truncate">{restaurant?.name ?? user?.restaurantName ?? "مطعمي"}</p>
+              <p className="font-bold text-sm text-foreground truncate">{restaurant?.name ?? user?.restaurantName ?? "—"}</p>
               <span className="text-xs bg-accent text-primary font-semibold px-2 py-0.5 rounded-full">
-                {(restaurant?.plan ?? user?.plan) === "pro" ? "احترافي" : (restaurant?.plan ?? user?.plan) === "enterprise" ? "مؤسسي" : "مجاني"}
+                {planLabel(restaurant?.plan ?? user?.plan)}
               </span>
             </div>
           </div>
@@ -120,7 +143,7 @@ export default function DashboardPage() {
               }`}
             >
               {item.icon}
-              <span className="flex-1 text-right">{item.label}</span>
+              <span className="flex-1 text-start">{item.label}</span>
               {item.badge ? (
                 <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${activeTab === item.id ? "bg-white/30 text-white" : "bg-primary text-white"}`}>
                   {item.badge}
@@ -131,16 +154,23 @@ export default function DashboardPage() {
         </nav>
 
         <div className="p-3 border-t border-border space-y-1">
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all">
+          <button
+            onClick={() => setActiveTab("settings")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeTab === "settings"
+                ? "bg-primary text-white shadow-sm"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+            }`}
+          >
             <Settings className="w-5 h-5" />
-            <span>الإعدادات</span>
+            <span className="flex-1 text-start">{t.settings}</span>
           </button>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
           >
             <LogOut className="w-5 h-5" />
-            <span>تسجيل الخروج</span>
+            <span className="flex-1 text-start">{t.logout}</span>
           </button>
         </div>
       </aside>
@@ -151,9 +181,9 @@ export default function DashboardPage() {
         <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
           <div>
             <h1 className="font-bold text-lg text-foreground">
-              {navItems.find(n => n.id === activeTab)?.label}
+              {activeTab === "settings" ? t.settings : navItems.find(n => n.id === activeTab)?.label}
             </h1>
-            <p className="text-xs text-muted-foreground">مرحباً، {user?.name ?? "مرحباً"} 👋</p>
+            <p className="text-xs text-muted-foreground">{t.welcome}، {user?.name ?? "—"} 👋</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -169,23 +199,26 @@ export default function DashboardPage() {
                 )}
               </button>
               {notifOpen && (
-                <div className="absolute left-0 top-11 w-64 bg-card border border-border rounded-2xl shadow-lg z-50 overflow-hidden">
+                <div className={`absolute ${dir === "rtl" ? "left-0" : "right-0"} top-11 w-64 bg-card border border-border rounded-2xl shadow-lg z-50 overflow-hidden`}>
                   <div className="p-3 border-b border-border">
-                    <p className="font-bold text-sm text-foreground">الإشعارات</p>
+                    <p className="font-bold text-sm text-foreground">{t.notifications}</p>
                   </div>
                   {orders.filter(o => o.status === "pending").map(o => (
                     <div key={o.id} className="p-3 border-b border-border last:border-0 hover:bg-accent/30">
-                      <p className="text-sm font-medium text-foreground">طلب جديد — طاولة {o.table_number}</p>
-                      <p className="text-xs text-muted-foreground">{o.items.length} أصناف • {o.total} ر.س</p>
+                      <p className="text-sm font-medium text-foreground">{t.newOrder} {o.table_number}</p>
+                      <p className="text-xs text-muted-foreground">{(o.items as unknown[]).length} {t.items} • {o.total} {t.currency}</p>
                     </div>
                   ))}
+                  {orders.filter(o => o.status === "pending").length === 0 && (
+                    <p className="p-4 text-sm text-muted-foreground text-center">—</p>
+                  )}
                 </div>
               )}
             </div>
-            <Link href="/menu/rest-1">
+            <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
               <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground border border-border px-3 py-2 rounded-xl hover:bg-accent/50 transition-colors">
                 <Eye className="w-4 h-4" />
-                معاينة المنيو
+                {t.previewMenu}
               </button>
             </Link>
           </div>
@@ -198,10 +231,10 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: "إجمالي الطلبات اليوم", value: "24", icon: <ShoppingBag className="w-5 h-5" />, color: "text-blue-600", bg: "bg-blue-50" },
-                  { label: "الإيرادات اليوم", value: "1,840 ر.س", icon: <DollarSign className="w-5 h-5" />, color: "text-green-600", bg: "bg-green-50" },
-                  { label: "متوسط قيمة الطلب", value: "76 ر.س", icon: <TrendingUp className="w-5 h-5" />, color: "text-primary", bg: "bg-accent" },
-                  { label: "الطاولات النشطة", value: `${orders.filter(o => o.status !== "delivered").length}/${tablesCount}`, icon: <Table2 className="w-5 h-5" />, color: "text-purple-600", bg: "bg-purple-50" },
+                  { label: t.totalOrdersToday, value: "24",                 icon: <ShoppingBag className="w-5 h-5" />, color: "text-blue-600",   bg: "bg-blue-50" },
+                  { label: t.revenueToday,      value: `1,840 ${t.currency}`, icon: <DollarSign className="w-5 h-5" />,  color: "text-green-600",  bg: "bg-green-50" },
+                  { label: t.avgOrderValue,     value: `76 ${t.currency}`,   icon: <TrendingUp className="w-5 h-5" />,   color: "text-primary",    bg: "bg-accent" },
+                  { label: t.activeTables,      value: `${orders.filter(o => o.status !== "delivered").length}/${tablesCount}`, icon: <Table2 className="w-5 h-5" />, color: "text-purple-600", bg: "bg-purple-50" },
                 ].map((stat, i) => (
                   <div key={i} className="bg-card border border-border rounded-2xl p-5">
                     <div className={`w-10 h-10 ${stat.bg} ${stat.color} rounded-xl flex items-center justify-center mb-3`}>
@@ -213,11 +246,10 @@ export default function DashboardPage() {
                 ))}
               </div>
 
-              {/* Recent orders */}
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="p-5 border-b border-border flex items-center justify-between">
-                  <h2 className="font-bold text-foreground">آخر الطلبات</h2>
-                  <button onClick={() => setActiveTab("orders")} className="text-xs text-primary font-medium hover:underline">عرض الكل</button>
+                  <h2 className="font-bold text-foreground">{t.recentOrders}</h2>
+                  <button onClick={() => setActiveTab("orders")} className="text-xs text-primary font-medium hover:underline">{t.viewAll}</button>
                 </div>
                 <div className="divide-y divide-border">
                   {orders.slice(0, 4).map(order => {
@@ -229,8 +261,8 @@ export default function DashboardPage() {
                             {order.table_number}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-foreground">طاولة {order.table_number}</p>
-                            <p className="text-xs text-muted-foreground">{(order.items as unknown[]).length} صنف • {order.total} ر.س</p>
+                            <p className="text-sm font-semibold text-foreground">{t.table} {order.table_number}</p>
+                            <p className="text-xs text-muted-foreground">{(order.items as unknown[]).length} {t.itemsCount} • {order.total} {t.currency}</p>
                           </div>
                         </div>
                         <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.color}`}>
@@ -239,13 +271,15 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
+                  {orders.length === 0 && (
+                    <p className="p-6 text-center text-sm text-muted-foreground">—</p>
+                  )}
                 </div>
               </div>
 
-              {/* Top selling items */}
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="p-5 border-b border-border">
-                  <h2 className="font-bold text-foreground">الأصناف الأكثر طلباً</h2>
+                  <h2 className="font-bold text-foreground">{t.topItems}</h2>
                 </div>
                 <div className="p-4 space-y-3">
                   {menuItems.filter(i => i.is_popular).slice(0, 5).map((item, idx) => (
@@ -263,6 +297,9 @@ export default function DashboardPage() {
                       <Star className="w-4 h-4 fill-primary text-primary" />
                     </div>
                   ))}
+                  {menuItems.filter(i => i.is_popular).length === 0 && (
+                    <p className="text-center text-sm text-muted-foreground py-4">—</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -271,12 +308,11 @@ export default function DashboardPage() {
           {/* MENU TAB */}
           {activeTab === "menu" && (
             <div className="space-y-5">
-              {/* Categories bar */}
               <div className="bg-card border border-border rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-sm text-foreground">الأقسام</h3>
+                  <h3 className="font-bold text-sm text-foreground">{t.categories}</h3>
                   <button className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:bg-accent/50 px-3 py-1.5 rounded-lg transition-colors">
-                    <Plus className="w-3.5 h-3.5" /> قسم جديد
+                    <Plus className="w-3.5 h-3.5" /> {t.newCategory}
                   </button>
                 </div>
                 <div className="flex gap-2 flex-wrap">
@@ -284,7 +320,7 @@ export default function DashboardPage() {
                     onClick={() => setSelectedCategory("all")}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${selectedCategory === "all" ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-accent/60"}`}
                   >
-                    الكل ({menuItems.length})
+                    {t.all} ({menuItems.length})
                   </button>
                   {categories.map(cat => (
                     <button
@@ -299,18 +335,16 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Add item button */}
               <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">{filteredItems.length} صنف</p>
+                <p className="text-sm text-muted-foreground">{filteredItems.length} {t.itemsCount}</p>
                 <button
                   onClick={() => setShowAddItem(true)}
                   className="flex items-center gap-2 bg-primary text-white font-semibold text-sm px-4 py-2 rounded-xl hover:brightness-110 transition-all shadow-sm"
                 >
-                  <Plus className="w-4 h-4" /> إضافة صنف
+                  <Plus className="w-4 h-4" /> {t.addItem}
                 </button>
               </div>
 
-              {/* Items grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {filteredItems.map(item => {
                   const cat = categories.find(c => c.id === item.category_id);
@@ -338,9 +372,9 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-2">
-                          <span className="text-sm font-black text-primary">{item.price} ر.س</span>
+                          <span className="text-sm font-black text-primary">{item.price} {t.currency}</span>
                           <div className="flex items-center gap-1.5">
-                            {item.is_popular && <span className="text-xs bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">🔥 رائج</span>}
+                            {item.is_popular && <span className="text-xs bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">🔥 {t.popular}</span>}
                             <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{cat?.icon} {cat?.name}</span>
                           </div>
                         </div>
@@ -358,18 +392,18 @@ export default function DashboardPage() {
               <div className="bg-card border border-border rounded-2xl p-6">
                 <div className="flex items-start justify-between mb-6">
                   <div>
-                    <h3 className="font-bold text-foreground mb-1">كود QR للمطعم كاملاً</h3>
-                    <p className="text-sm text-muted-foreground">يفتح المنيو العام بدون تحديد طاولة</p>
+                    <h3 className="font-bold text-foreground mb-1">{t.restaurantQr}</h3>
+                    <p className="text-sm text-muted-foreground">{t.restaurantQrDesc}</p>
                   </div>
                   <button className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl hover:brightness-110 transition-all">
-                    تحميل QR
+                    {t.downloadQr}
                   </button>
                 </div>
                 <div className="flex items-center justify-center py-8 bg-muted/40 rounded-2xl">
                   <div className="bg-white p-6 rounded-2xl shadow-md text-center">
                     <QrCode className="w-32 h-32 text-foreground mx-auto" />
-                    <p className="mt-3 text-sm font-bold text-foreground">{restaurant?.name ?? "مطعمي"}</p>
-                    <p className="text-xs text-muted-foreground">امسح لعرض المنيو</p>
+                    <p className="mt-3 text-sm font-bold text-foreground">{restaurant?.name ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{t.scanToView}</p>
                   </div>
                 </div>
               </div>
@@ -377,11 +411,11 @@ export default function DashboardPage() {
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="p-5 border-b border-border flex items-center justify-between">
                   <div>
-                    <h3 className="font-bold text-foreground">أكواد QR للطاولات</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{tablesCount} طاولة</p>
+                    <h3 className="font-bold text-foreground">{t.tableQrs}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{tablesCount} {t.tableLabel}</p>
                   </div>
                   <button className="flex items-center gap-2 text-sm font-semibold text-primary border border-primary/30 px-3 py-2 rounded-xl hover:bg-accent transition-all">
-                    تحميل الكل
+                    {t.downloadAll}
                   </button>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 p-4">
@@ -396,7 +430,7 @@ export default function DashboardPage() {
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedQrTable === table ? "bg-primary" : "bg-muted"}`}>
                         <QrCode className={`w-5 h-5 ${selectedQrTable === table ? "text-white" : "text-muted-foreground"}`} />
                       </div>
-                      <span className="text-xs font-bold text-foreground">طاولة {table}</span>
+                      <span className="text-xs font-bold text-foreground">{t.tableLabel} {table}</span>
                     </button>
                   ))}
                 </div>
@@ -407,11 +441,11 @@ export default function DashboardPage() {
                         <QrCode className="w-20 h-20 text-foreground" />
                       </div>
                       <div>
-                        <p className="font-bold text-foreground mb-1">{restaurant?.name ?? "مطعمي"} — طاولة {selectedQrTable}</p>
-                        <p className="text-sm text-muted-foreground mb-4">رابط: /menu/{restaurant?.id}?table={selectedQrTable}</p>
+                        <p className="font-bold text-foreground mb-1">{restaurant?.name ?? "—"} — {t.tableLabel} {selectedQrTable}</p>
+                        <p className="text-sm text-muted-foreground mb-4">{t.link}: /menu/{restaurant?.id}?table={selectedQrTable}</p>
                         <div className="flex gap-2">
-                          <button className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl hover:brightness-110 transition-all">تحميل PNG</button>
-                          <button className="border border-border text-sm font-medium text-foreground px-4 py-2 rounded-xl hover:bg-card transition-all">نسخ الرابط</button>
+                          <button className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl hover:brightness-110 transition-all">{t.downloadPng}</button>
+                          <button className="border border-border text-sm font-medium text-foreground px-4 py-2 rounded-xl hover:bg-card transition-all">{t.copyLink}</button>
                         </div>
                       </div>
                     </div>
@@ -424,7 +458,6 @@ export default function DashboardPage() {
           {/* ORDERS TAB */}
           {activeTab === "orders" && (
             <div className="space-y-4">
-              {/* Status filter */}
               <div className="flex gap-2 flex-wrap">
                 {(["all", "pending", "preparing", "ready", "delivered"] as const).map(s => (
                   <button
@@ -438,7 +471,10 @@ export default function DashboardPage() {
                         : "border-border bg-muted text-muted-foreground"
                     }`}
                   >
-                    {s === "all" ? `الكل (${orders.length})` : `${STATUS_CONFIG[s].label} (${orders.filter(o => o.status === s).length})`}
+                    {s === "all"
+                      ? `${t.statusAll} (${orders.length})`
+                      : `${STATUS_CONFIG[s].label} (${orders.filter(o => o.status === s).length})`
+                    }
                   </button>
                 ))}
               </div>
@@ -454,9 +490,9 @@ export default function DashboardPage() {
                             {order.table_number}
                           </div>
                           <div>
-                            <p className="font-bold text-foreground">طاولة رقم {order.table_number}</p>
+                            <p className="font-bold text-foreground">{t.tableNo} {order.table_number}</p>
                             <p className="text-xs text-muted-foreground">
-                              {new Date(order.created_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(order.created_at).toLocaleTimeString(lang === "ar" ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
                         </div>
@@ -470,14 +506,14 @@ export default function DashboardPage() {
                             <span className="text-base">🍽️</span>
                             <span className="flex-1 text-foreground">{line.item_name}</span>
                             <span className="text-muted-foreground">×{line.quantity}</span>
-                            <span className="font-semibold text-foreground">{(line.price * line.quantity).toFixed(2)} ر.س</span>
+                            <span className="font-semibold text-foreground">{(line.price * line.quantity).toFixed(2)} {t.currency}</span>
                           </div>
                         ))}
                       </div>
                       <div className="flex items-center justify-between pt-3 border-t border-border">
                         <div>
-                          <span className="text-xs text-muted-foreground">الإجمالي: </span>
-                          <span className="font-black text-primary">{order.total} ر.س</span>
+                          <span className="text-xs text-muted-foreground">{t.total}: </span>
+                          <span className="font-black text-primary">{order.total} {t.currency}</span>
                         </div>
                         {cfg.next && (
                           <button
@@ -491,9 +527,104 @@ export default function DashboardPage() {
                     </div>
                   );
                 })}
+                {orders.length === 0 && (
+                  <div className="text-center py-16">
+                    <ShoppingBag className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">—</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
+
+          {/* SETTINGS TAB */}
+          {activeTab === "settings" && (
+            <div className="max-w-xl space-y-6">
+
+              {/* Language card */}
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                <div className="p-5 border-b border-border flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Globe className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">{t.languageSection}</p>
+                    <p className="text-xs text-muted-foreground">{t.languageDesc}</p>
+                  </div>
+                </div>
+                <div className="p-5 space-y-3">
+                  {(["ar", "en"] as Lang[]).map(l => (
+                    <label
+                      key={l}
+                      onClick={() => setPendingLang(l)}
+                      className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        pendingLang === l
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/30 hover:bg-accent/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{l === "ar" ? "🇸🇦" : "🇺🇸"}</span>
+                        <div>
+                          <p className="font-semibold text-sm text-foreground">
+                            {l === "ar" ? t.arabic : t.english}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {l === "ar" ? "RTL — من اليمين لليسار" : "LTR — Left to right"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                        pendingLang === l ? "border-primary bg-primary" : "border-border"
+                      }`}>
+                        {pendingLang === l && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="px-5 pb-5">
+                  <button
+                    onClick={handleSaveSettings}
+                    className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:brightness-110 transition-all shadow-sm"
+                  >
+                    {settingsSaved ? t.settingsSaved : t.saveSettings}
+                  </button>
+                </div>
+              </div>
+
+              {/* Restaurant info card */}
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                <div className="p-5 border-b border-border flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-xl">
+                    {restaurant?.logo ?? "🍽️"}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-foreground">{t.restaurantInfo}</p>
+                    <p className="text-xs text-muted-foreground">{t.restaurantInfoDesc}</p>
+                  </div>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">{lang === "ar" ? "الاسم" : "Name"}</span>
+                    <span className="font-semibold text-foreground">{restaurant?.name ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">{lang === "ar" ? "الباقة" : "Plan"}</span>
+                    <span className="font-semibold text-foreground">{planLabel(restaurant?.plan)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">{lang === "ar" ? "عدد الطاولات" : "Tables"}</span>
+                    <span className="font-semibold text-foreground">{restaurant?.tables_count ?? "—"}</span>
+                  </div>
+                  <button className="w-full mt-2 border border-border text-foreground font-semibold py-2.5 rounded-xl hover:bg-accent/50 transition-all text-sm">
+                    {t.editInfo}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
         </div>
       </main>
 
@@ -502,27 +633,27 @@ export default function DashboardPage() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-3xl w-full max-w-md shadow-2xl">
             <div className="p-5 border-b border-border flex items-center justify-between">
-              <h3 className="font-bold text-foreground">إضافة صنف جديد</h3>
+              <h3 className="font-bold text-foreground">{t.addNewItem}</h3>
               <button onClick={() => setShowAddItem(false)} className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center hover:bg-accent transition-colors">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-foreground block mb-1.5">اسم الصنف *</label>
-                <input className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" placeholder="مثال: دجاج مشوي" />
+                <label className="text-xs font-semibold text-foreground block mb-1.5">{t.itemName} *</label>
+                <input className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" placeholder={t.itemNamePlaceholder} />
               </div>
               <div>
-                <label className="text-xs font-semibold text-foreground block mb-1.5">الوصف</label>
-                <textarea className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none" rows={2} placeholder="وصف مختصر للصنف..." />
+                <label className="text-xs font-semibold text-foreground block mb-1.5">{t.description}</label>
+                <textarea className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none" rows={2} placeholder={t.descriptionPlaceholder} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-foreground block mb-1.5">السعر (ر.س) *</label>
+                  <label className="text-xs font-semibold text-foreground block mb-1.5">{t.price} ({t.currency}) *</label>
                   <input type="number" className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" placeholder="0" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-foreground block mb-1.5">القسم *</label>
+                  <label className="text-xs font-semibold text-foreground block mb-1.5">{t.section} *</label>
                   <select className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all">
                     {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                   </select>
@@ -530,10 +661,10 @@ export default function DashboardPage() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowAddItem(false)} className="flex-1 border border-border text-foreground font-semibold py-2.5 rounded-xl hover:bg-accent/50 transition-all text-sm">
-                  إلغاء
+                  {t.cancel}
                 </button>
                 <button onClick={() => setShowAddItem(false)} className="flex-1 bg-primary text-white font-semibold py-2.5 rounded-xl hover:brightness-110 transition-all text-sm">
-                  إضافة الصنف
+                  {t.add}
                 </button>
               </div>
             </div>
