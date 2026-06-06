@@ -9,7 +9,8 @@ import {
 import type { OrderStatus, CategoryRow, MenuItemRow, OrderRow, RestaurantRow } from "@/lib/database.types";
 import {
   getRestaurantByOwner, getCategories, getMenuItems, getOrders,
-  updateOrderStatus, deleteMenuItem, subscribeToOrders, createMenuItem
+  updateOrderStatus, deleteMenuItem, subscribeToOrders, createMenuItem,
+  createCategory, updateRestaurant
 } from "@/lib/api";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/auth-context";
@@ -312,6 +313,16 @@ export default function DashboardPage() {
   const [pendingLang, setPendingLang] = useState<Lang>(lang);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
+  // Category creation
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState("🍽️");
+  const [addingCategory, setAddingCategory] = useState(false);
+
+  // Cover photo
+  const coverFileRef = useRef<HTMLInputElement>(null);
+  const [coverSaving, setCoverSaving] = useState(false);
+
   useEffect(() => { setPendingLang(lang); }, [lang]);
 
   useEffect(() => {
@@ -359,6 +370,33 @@ export default function DashboardPage() {
   const handleDeleteItem = async (id: string) => {
     await deleteMenuItem(id);
     setMenuItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCatName.trim() || !restaurant) return;
+    setAddingCategory(true);
+    const { data } = await createCategory(restaurant.id, newCatName.trim(), newCatIcon);
+    setAddingCategory(false);
+    if (data) {
+      setCategories(prev => [...prev, data as CategoryRow]);
+      setNewCatName("");
+      setNewCatIcon("🍽️");
+      setShowAddCategory(false);
+    }
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !restaurant) return;
+    setCoverSaving(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const { data } = await updateRestaurant(restaurant.id, { cover_color: dataUrl });
+      if (data) setRestaurant(data);
+      setCoverSaving(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   const filteredItems = selectedCategory === "all"
@@ -597,11 +635,36 @@ export default function DashboardPage() {
             <div className="max-w-2xl space-y-0">
 
               {/* Cover photo */}
-              <div className="relative h-44 rounded-3xl overflow-hidden mb-4 bg-gray-200 group cursor-pointer"
-                style={{ background: restaurant?.cover_color ?? "linear-gradient(135deg, #e0e7ff, #c7d2fe)" }}>
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+              <input
+                ref={coverFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleCoverUpload}
+              />
+              <div
+                className="relative h-44 rounded-3xl overflow-hidden mb-4 group cursor-pointer"
+                onClick={() => coverFileRef.current?.click()}
+                style={{
+                  background: restaurant?.cover_color?.startsWith("data:")
+                    ? "none"
+                    : (restaurant?.cover_color ?? "linear-gradient(135deg, #e0e7ff, #c7d2fe)"),
+                }}
+              >
+                {/* If cover is an uploaded image */}
+                {restaurant?.cover_color?.startsWith("data:") && (
+                  <img
+                    src={restaurant.cover_color}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                )}
+                {/* Hover overlay */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
                   <div className="bg-white/90 rounded-2xl px-4 py-2 flex items-center gap-2 text-sm font-semibold text-gray-800">
-                    <Camera className="w-4 h-4" /> تغيير الغلاف
+                    {coverSaving
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ الرفع...</>
+                      : <><Camera className="w-4 h-4" /> تغيير الغلاف</>
+                    }
                   </div>
                 </div>
                 <div className="absolute bottom-3 right-3">
@@ -642,11 +705,59 @@ export default function DashboardPage() {
                   </button>
                 ))}
                 {/* Dashed add category */}
-                <button className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-indigo-600 transition-all"
-                  style={{ border: "2px dashed #6366f1" }}>
+                <button
+                  onClick={() => setShowAddCategory(true)}
+                  className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-indigo-600 transition-all hover:bg-indigo-50"
+                  style={{ border: "2px dashed #6366f1" }}
+                >
                   <Plus className="w-3.5 h-3.5" /> {t.newCategory}
                 </button>
               </div>
+
+              {/* Inline category creation form */}
+              {showAddCategory && (
+                <div className="bg-white border border-indigo-200 rounded-3xl p-4 mb-4 shadow-sm">
+                  <p className="text-sm font-bold text-gray-900 mb-3">إضافة قسم جديد</p>
+                  <div className="flex gap-2 mb-3">
+                    {/* Icon picker */}
+                    <div className="flex gap-1.5 flex-wrap">
+                      {["🍽️","🍔","🍕","☕","🥗","🍰","🧃","🍣","🌮","🍜"].map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => setNewCatIcon(emoji)}
+                          className={`w-9 h-9 rounded-xl text-lg transition-all ${newCatIcon === emoji ? "bg-indigo-100 ring-2 ring-indigo-400" : "bg-gray-100 hover:bg-gray-200"}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleAddCategory()}
+                      placeholder="اسم القسم (مثال: مشروبات)"
+                      className="flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    />
+                    <button
+                      onClick={handleAddCategory}
+                      disabled={!newCatName.trim() || addingCategory}
+                      className="px-4 py-2.5 rounded-2xl text-white text-sm font-bold disabled:opacity-50 flex items-center gap-1.5"
+                      style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}
+                    >
+                      {addingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> إضافة</>}
+                    </button>
+                    <button
+                      onClick={() => { setShowAddCategory(false); setNewCatName(""); }}
+                      className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Section header */}
               {categories.filter(c => selectedCategory === "all" || c.id === selectedCategory).map(cat => {
