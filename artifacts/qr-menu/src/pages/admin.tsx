@@ -1,11 +1,12 @@
 import { useState } from "react";
 import {
-  LayoutDashboard, Store, Users, CreditCard, TrendingUp,
-  QrCode, Settings, LogOut, Search, MoreVertical,
-  CheckCircle2, XCircle, Clock, Eye, Trash2, ChevronUp, ChevronDown
+  LayoutDashboard, Store, CreditCard, TrendingUp,
+  QrCode, Settings, LogOut, Search,
+  CheckCircle2, XCircle, Eye, Trash2
 } from "lucide-react";
 import { MOCK_ADMIN_RESTAURANTS, type Restaurant } from "@/data/mock";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/context/auth-context";
 
 type Tab = "overview" | "restaurants" | "plans" | "settings";
 
@@ -16,9 +17,13 @@ const PLAN_LABELS: Record<Restaurant["plan"], { label: string; color: string }> 
 };
 
 export default function AdminPage() {
+  const { logout } = useAuth();
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [search, setSearch] = useState("");
   const [restaurants, setRestaurants] = useState(MOCK_ADMIN_RESTAURANTS);
+
+  const handleLogout = () => { logout(); navigate("/login"); };
 
   const filtered = restaurants.filter(r =>
     r.name.includes(search) || r.owner.includes(search)
@@ -77,12 +82,13 @@ export default function AdminPage() {
         </nav>
 
         <div className="p-3 border-t border-border">
-          <Link href="/">
-            <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all">
-              <LogOut className="w-5 h-5" />
-              <span>خروج</span>
-            </button>
-          </Link>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>خروج</span>
+          </button>
         </div>
       </aside>
 

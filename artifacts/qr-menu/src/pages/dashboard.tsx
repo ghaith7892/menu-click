@@ -1,15 +1,16 @@
 import { useState } from "react";
 import {
   LayoutDashboard, UtensilsCrossed, QrCode, ShoppingBag,
-  Plus, Pencil, Trash2, ChevronDown, Bell, LogOut,
+  Plus, Pencil, Trash2, Bell, LogOut,
   CheckCircle2, Clock, ChefHat, Truck, X, Settings,
-  TrendingUp, Users, Star, DollarSign, Table2, Eye
+  TrendingUp, Star, DollarSign, Table2, Eye
 } from "lucide-react";
 import {
   MOCK_RESTAURANT, MOCK_CATEGORIES, MOCK_MENU_ITEMS,
-  MOCK_ORDERS, type Order, type OrderStatus, type MenuItem, type Category
+  MOCK_ORDERS, type Order, type OrderStatus, type MenuItem
 } from "@/data/mock";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/context/auth-context";
 
 type Tab = "overview" | "menu" | "qr" | "orders";
 
@@ -21,12 +22,16 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; icon: R
 };
 
 export default function DashboardPage() {
+  const { user, logout } = useAuth();
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAddItem, setShowAddItem] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState<number | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
+
+  const handleLogout = () => { logout(); navigate("/login"); };
 
   const pendingCount = orders.filter(o => o.status === "pending").length;
 
@@ -59,9 +64,9 @@ export default function DashboardPage() {
               {MOCK_RESTAURANT.logo}
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-sm text-foreground truncate">{MOCK_RESTAURANT.name}</p>
+              <p className="font-bold text-sm text-foreground truncate">{user?.restaurantName || MOCK_RESTAURANT.name}</p>
               <span className="text-xs bg-accent text-primary font-semibold px-2 py-0.5 rounded-full">
-                {MOCK_RESTAURANT.plan === "pro" ? "احترافي" : MOCK_RESTAURANT.plan === "enterprise" ? "مؤسسي" : "مجاني"}
+                {(user?.plan || MOCK_RESTAURANT.plan) === "pro" ? "احترافي" : (user?.plan || MOCK_RESTAURANT.plan) === "enterprise" ? "مؤسسي" : "مجاني"}
               </span>
             </div>
           </div>
@@ -94,12 +99,13 @@ export default function DashboardPage() {
             <Settings className="w-5 h-5" />
             <span>الإعدادات</span>
           </button>
-          <Link href="/">
-            <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all">
-              <LogOut className="w-5 h-5" />
-              <span>تسجيل الخروج</span>
-            </button>
-          </Link>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>تسجيل الخروج</span>
+          </button>
         </div>
       </aside>
 
@@ -111,7 +117,7 @@ export default function DashboardPage() {
             <h1 className="font-bold text-lg text-foreground">
               {navItems.find(n => n.id === activeTab)?.label}
             </h1>
-            <p className="text-xs text-muted-foreground">مرحباً، {MOCK_RESTAURANT.owner} 👋</p>
+            <p className="text-xs text-muted-foreground">مرحباً، {user?.name || MOCK_RESTAURANT.owner} 👋</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">

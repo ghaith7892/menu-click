@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { QrCode, LayoutDashboard, UtensilsCrossed, Smartphone, ChevronDown, Check, Star, ArrowLeft } from "lucide-react";
 
 const features = [
@@ -84,12 +85,16 @@ export default function LandingPage() {
             <a href="#faq" className="hover:text-foreground transition-colors">الأسئلة الشائعة</a>
           </div>
           <div className="flex items-center gap-3">
-            <button className="text-sm font-semibold text-foreground hover:text-primary transition-colors px-3 py-2">
-              تسجيل دخول
-            </button>
-            <button className="bg-primary hover:brightness-110 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-all shadow-sm">
-              ابدأ مجاناً
-            </button>
+            <Link href="/login">
+              <button className="text-sm font-semibold text-foreground hover:text-primary transition-colors px-3 py-2">
+                تسجيل دخول
+              </button>
+            </Link>
+            <Link href="/register">
+              <button className="bg-primary hover:brightness-110 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-all shadow-sm">
+                ابدأ مجاناً
+              </button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -112,13 +117,17 @@ export default function LandingPage() {
             حوّل قائمة طعامك إلى تجربة رقمية احترافية. أنشئ منيوك، ولّد كود QR لكل طاولة، واستقبل الطلبات مباشرة — كل ذلك في منصة واحدة.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button className="w-full sm:w-auto bg-primary hover:brightness-110 text-white font-bold px-8 py-4 rounded-2xl text-base transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2">
-              ابدأ تجربتك المجانية
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <button className="w-full sm:w-auto bg-card border border-border text-foreground font-semibold px-8 py-4 rounded-2xl text-base transition-all hover:border-primary/40 hover:bg-accent/50">
-              شاهد كيف يعمل
-            </button>
+            <Link href="/register">
+              <button className="w-full sm:w-auto bg-primary hover:brightness-110 text-white font-bold px-8 py-4 rounded-2xl text-base transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2">
+                ابدأ تجربتك المجانية
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            </Link>
+            <Link href="/login">
+              <button className="w-full sm:w-auto bg-card border border-border text-foreground font-semibold px-8 py-4 rounded-2xl text-base transition-all hover:border-primary/40 hover:bg-accent/50">
+                تسجيل الدخول
+              </button>
+            </Link>
           </div>
           <p className="mt-5 text-sm text-muted-foreground">لا يلزم بطاقة ائتمان • إعداد في دقائق</p>
         </div>
