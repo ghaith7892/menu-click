@@ -1,22 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  LayoutDashboard, UtensilsCrossed, QrCode, ShoppingBag,
-  Trash2, Bell, LogOut,
-  CheckCircle2, Clock, ChefHat, Truck, X, Settings,
-  TrendingUp, Star, DollarSign, Table2, Eye, Loader2, Globe,
-  Plus, Minus, Camera, Link2, Download, Pencil
+  UtensilsCrossed, QrCode,
+  Trash2, LogOut,
+  X, Settings,
+  Eye, Loader2, Globe,
+  Plus, Minus, Camera, Link2, Pencil, CheckCircle2
 } from "lucide-react";
-import type { OrderStatus, CategoryRow, MenuItemRow, OrderRow, RestaurantRow } from "@/lib/database.types";
+import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
-  getRestaurantByOwner, getCategories, getMenuItems, getOrders,
-  updateOrderStatus, deleteMenuItem, subscribeToOrders, createMenuItem,
+  getRestaurantByOwner, getCategories, getMenuItems,
+  deleteMenuItem, createMenuItem,
   createCategory, updateRestaurant
 } from "@/lib/api";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/auth-context";
 import { useLang, type Lang } from "@/context/lang-context";
 
-type Tab = "overview" | "menu" | "qr" | "orders" | "settings";
+type Tab = "menu" | "qr" | "settings";
 type UnitType = "g" | "ml";
 
 interface Variation {
@@ -304,12 +304,9 @@ export default function DashboardPage() {
   const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
-  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAddItem, setShowAddItem] = useState(false);
-  const [selectedQrTable, setSelectedQrTable] = useState<number | null>(null);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [pendingLang, setPendingLang] = useState<Lang>(lang);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -333,39 +330,18 @@ export default function DashboardPage() {
       const rest = await getRestaurantByOwner(user.id);
       setRestaurant(rest);
       if (rest) {
-        const [cats, items, ords] = await Promise.all([
+        const [cats, items] = await Promise.all([
           getCategories(rest.id),
           getMenuItems(rest.id),
-          getOrders(rest.id),
         ]);
         setCategories(cats);
         setMenuItems(items);
-        setOrders(ords);
-        unsubscribe = subscribeToOrders(rest.id, setOrders);
       }
       setDataLoading(false);
     })();
-    return () => unsubscribe?.();
   }, [user?.id]);
 
-  const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; icon: React.ReactNode; next?: OrderStatus; nextLabel?: string }> = {
-    pending:   { label: t.pending,         color: "bg-yellow-100 text-yellow-700 border-yellow-200",  icon: <Clock className="w-3.5 h-3.5" />,       next: "preparing", nextLabel: t.startPrep },
-    preparing: { label: t.preparing,       color: "bg-blue-100 text-blue-700 border-blue-200",        icon: <ChefHat className="w-3.5 h-3.5" />,      next: "ready",     nextLabel: t.readyToDeliver },
-    ready:     { label: t.ready,           color: "bg-green-100 text-green-700 border-green-200",      icon: <CheckCircle2 className="w-3.5 h-3.5" />, next: "delivered", nextLabel: t.delivered },
-    delivered: { label: t.deliveredStatus, color: "bg-gray-100 text-gray-500 border-gray-200",         icon: <Truck className="w-3.5 h-3.5" /> },
-  };
-
   const handleLogout = () => { logout(); navigate("/login"); };
-  const pendingCount = orders.filter(o => o.status === "pending").length;
-
-  const advanceOrder = async (id: string) => {
-    const order = orders.find(o => o.id === id);
-    if (!order) return;
-    const cfg = STATUS_CONFIG[order.status];
-    if (!cfg.next) return;
-    const { data } = await updateOrderStatus(id, cfg.next);
-    if (data) setOrders(prev => prev.map(o => o.id === id ? data : o));
-  };
 
   const handleDeleteItem = async (id: string) => {
     await deleteMenuItem(id);
@@ -403,7 +379,6 @@ export default function DashboardPage() {
     ? menuItems
     : menuItems.filter(i => i.category_id === selectedCategory);
 
-  const tablesCount = restaurant?.tables_count ?? 5;
   const planLabel = (plan?: string) =>
     plan === "pro" ? t.planPro : plan === "enterprise" ? t.planEnterprise : t.planFree;
 
@@ -413,11 +388,9 @@ export default function DashboardPage() {
     setTimeout(() => setSettingsSaved(false), 2500);
   };
 
-  const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "overview",  label: t.overview,  icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: "menu",      label: t.menuMgmt,  icon: <UtensilsCrossed className="w-5 h-5" /> },
-    { id: "qr",        label: t.qrCodes,   icon: <QrCode className="w-5 h-5" /> },
-    { id: "orders",    label: t.orders,    icon: <ShoppingBag className="w-5 h-5" />, badge: pendingCount },
+  const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "menu",  label: t.menuMgmt, icon: <UtensilsCrossed className="w-5 h-5" /> },
+    { id: "qr",   label: t.qrCodes,  icon: <QrCode className="w-5 h-5" /> },
   ];
 
   if (dataLoading) {
@@ -467,13 +440,6 @@ export default function DashboardPage() {
             >
               {item.icon}
               <span className="flex-1 text-start">{item.label}</span>
-              {item.badge ? (
-                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
-                  activeTab === item.id ? "bg-white/30 text-white" : "bg-indigo-100 text-indigo-600"
-                }`}>
-                  {item.badge}
-                </span>
-              ) : null}
             </button>
           ))}
         </nav>
@@ -511,36 +477,6 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-400">{t.welcome}، {user?.name ?? "—"} 👋</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <button
-                onClick={() => setNotifOpen(!notifOpen)}
-                className="relative w-9 h-9 rounded-2xl border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 transition-colors"
-              >
-                <Bell className="w-4 h-4 text-gray-400" />
-                {pendingCount > 0 && (
-                  <span className="absolute -top-1 -left-1 w-4 h-4 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
-                    style={primaryStyle}>
-                    {pendingCount}
-                  </span>
-                )}
-              </button>
-              {notifOpen && (
-                <div className={`absolute ${dir === "rtl" ? "left-0" : "right-0"} top-11 w-64 bg-white border border-gray-100 rounded-3xl shadow-xl z-50 overflow-hidden`}>
-                  <div className="p-3 border-b border-gray-100">
-                    <p className="font-bold text-sm text-gray-900">{t.notifications}</p>
-                  </div>
-                  {orders.filter(o => o.status === "pending").map(o => (
-                    <div key={o.id} className="p-3 border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                      <p className="text-sm font-medium text-gray-900">{t.newOrder} {o.table_number}</p>
-                      <p className="text-xs text-gray-400">{(o.items as unknown[]).length} {t.items} • {o.total} {t.currency}</p>
-                    </div>
-                  ))}
-                  {orders.filter(o => o.status === "pending").length === 0 && (
-                    <p className="p-4 text-sm text-gray-400 text-center">لا إشعارات</p>
-                  )}
-                </div>
-              )}
-            </div>
             <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
               <button className="flex items-center gap-2 text-sm font-semibold text-gray-600 border border-gray-200 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors">
                 <Eye className="w-4 h-4" />
@@ -551,84 +487,6 @@ export default function DashboardPage() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-6">
-
-          {/* ══ OVERVIEW TAB ══ */}
-          {activeTab === "overview" && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: t.totalOrdersToday, value: "24",                 icon: <ShoppingBag className="w-5 h-5" />, color: "text-blue-600",   bg: "bg-blue-50" },
-                  { label: t.revenueToday,      value: `1,840 ${t.currency}`, icon: <DollarSign className="w-5 h-5" />,  color: "text-green-600",  bg: "bg-green-50" },
-                  { label: t.avgOrderValue,     value: `76 ${t.currency}`,    icon: <TrendingUp className="w-5 h-5" />,  color: "text-indigo-600", bg: "bg-indigo-50" },
-                  { label: t.activeTables,      value: `${orders.filter(o => o.status !== "delivered").length}/${tablesCount}`, icon: <Table2 className="w-5 h-5" />, color: "text-purple-600", bg: "bg-purple-50" },
-                ].map((stat, i) => (
-                  <div key={i} className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
-                    <div className={`w-10 h-10 ${stat.bg} ${stat.color} rounded-2xl flex items-center justify-center mb-3`}>
-                      {stat.icon}
-                    </div>
-                    <p className="text-2xl font-black text-gray-900">{stat.value}</p>
-                    <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                  <h2 className="font-bold text-gray-900">{t.recentOrders}</h2>
-                  <button onClick={() => setActiveTab("orders")} className="text-xs font-semibold text-indigo-600 hover:underline">{t.viewAll}</button>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {orders.slice(0, 4).map(order => {
-                    const cfg = STATUS_CONFIG[order.status];
-                    return (
-                      <div key={order.id} className="p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-sm text-white"
-                            style={primaryStyle}>
-                            {order.table_number}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">{t.table} {order.table_number}</p>
-                            <p className="text-xs text-gray-400">{(order.items as unknown[]).length} {t.itemsCount} • {order.total} {t.currency}</p>
-                          </div>
-                        </div>
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.color}`}>
-                          {cfg.icon} {cfg.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {orders.length === 0 && <p className="p-6 text-center text-sm text-gray-400">—</p>}
-                </div>
-              </div>
-
-              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-gray-100">
-                  <h2 className="font-bold text-gray-900">{t.topItems}</h2>
-                </div>
-                <div className="p-4 space-y-3">
-                  {menuItems.filter(i => i.is_popular).slice(0, 5).map((item, idx) => (
-                    <div key={item.id} className="flex items-center gap-3">
-                      <span className="text-lg w-8 text-center">{item.image ?? "🍽️"}</span>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${85 - idx * 15}%`, ...primaryStyle }} />
-                          </div>
-                          <span className="text-xs text-gray-400">{85 - idx * 15}%</span>
-                        </div>
-                      </div>
-                      <Star className="w-4 h-4 fill-indigo-500 text-indigo-500" />
-                    </div>
-                  ))}
-                  {menuItems.filter(i => i.is_popular).length === 0 && (
-                    <p className="text-center text-sm text-gray-400 py-4">—</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ══ MENU TAB (Menusa style) ══ */}
           {activeTab === "menu" && (
@@ -844,50 +702,49 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ══ QR TAB (Menusa style) ══ */}
+          {/* ══ QR TAB ══ */}
           {activeTab === "qr" && (
-            <div className="max-w-xl space-y-6">
-
-              {/* Main QR card */}
+            <div className="max-w-md space-y-6">
               <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
                 <div className="p-6">
                   <h3 className="font-bold text-gray-900 mb-1">{t.restaurantQr}</h3>
                   <p className="text-sm text-gray-400 mb-5">{t.restaurantQrDesc}</p>
 
-                  <div className="flex items-center justify-center py-8 bg-gray-50 rounded-3xl mb-5">
+                  {/* QR Code display */}
+                  <div className="flex items-center justify-center py-10 bg-gray-50 rounded-3xl mb-5">
                     <div className="bg-white p-6 rounded-3xl shadow-md text-center">
-                      <QrCode className="w-28 h-28 text-gray-900 mx-auto" />
-                      <p className="mt-3 text-sm font-bold text-gray-900">{restaurant?.name ?? "—"}</p>
+                      <QrCode className="w-36 h-36 text-gray-900 mx-auto" />
+                      <p className="mt-4 text-sm font-bold text-gray-900">{restaurant?.name ?? "—"}</p>
                       <p className="text-xs text-gray-400 mt-1">{t.scanToView}</p>
                     </div>
                   </div>
 
-                  {/* Restaurant info card (Menusa preview) */}
-                  <div className="bg-gray-50 rounded-2xl p-4 mb-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl"
-                        style={primaryStyle}>
-                        {restaurant?.logo ?? "🍽️"}
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm text-gray-900">{restaurant?.name ?? "—"}</p>
-                        <p className="text-xs text-gray-400">08:00 — 21:00</p>
-                      </div>
+                  {/* Menu URL */}
+                  <div className="bg-gray-50 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={primaryStyle}>
+                      <Link2 className="w-4 h-4 text-white" />
                     </div>
-                    <div className="text-xs text-gray-400 flex items-center gap-1">
-                      <span>📷</span>
-                      <span>@{restaurant?.name?.toLowerCase().replace(/\s/g, "") ?? "restaurant"}</span>
-                    </div>
+                    <p className="text-xs text-gray-500 flex-1 truncate" dir="ltr">
+                      {typeof window !== "undefined" ? window.location.origin : ""}/menu/{restaurant?.id ?? "…"}
+                    </p>
                   </div>
 
-                  {/* Two action buttons */}
+                  {/* Action buttons */}
                   <div className="flex gap-3">
-                    <button className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors">
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}/menu/${restaurant?.id}`;
+                        navigator.clipboard.writeText(url);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors"
+                    >
                       <Link2 className="w-4 h-4" />
                       {t.copyLink}
                     </button>
-                    <button className="flex-1 flex items-center justify-center gap-2 text-white font-bold py-4 rounded-2xl text-sm hover:brightness-110 transition-all"
-                      style={primaryStyle}>
+                    <button
+                      className="flex-1 flex items-center justify-center gap-2 text-white font-bold py-4 rounded-2xl text-sm hover:brightness-110 transition-all"
+                      style={primaryStyle}
+                    >
                       <QrCode className="w-4 h-4" />
                       {t.downloadQr}
                     </button>
@@ -895,144 +752,33 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Table QRs */}
-              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              {/* Status card */}
+              <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
+                <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-bold text-gray-900">{t.tableQrs}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">{tablesCount} {t.tableLabel}</p>
+                    <p className="font-bold text-gray-900 text-sm">حالة المنيو</p>
+                    <p className="text-xs text-gray-400 mt-0.5">المنيو مرئي للزوار عند مسح الكود</p>
                   </div>
-                  <button className="flex items-center gap-2 text-sm font-semibold text-indigo-600 border border-indigo-200 px-3 py-2 rounded-2xl hover:bg-indigo-50 transition-all">
-                    <Download className="w-4 h-4" />
-                    {t.downloadAll}
-                  </button>
+                  <span className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-3 py-1.5 rounded-full border border-green-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    نشط
+                  </span>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 p-4">
-                  {Array.from({ length: tablesCount }, (_, i) => i + 1).map(table => (
-                    <button
-                      key={table}
-                      onClick={() => setSelectedQrTable(selectedQrTable === table ? null : table)}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
-                        selectedQrTable === table ? "border-indigo-400 bg-indigo-50 shadow-sm" : "border-gray-100 bg-white hover:border-indigo-200"
-                      }`}
-                    >
-                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${selectedQrTable === table ? "" : "bg-gray-100"}`}
-                        style={selectedQrTable === table ? primaryStyle : {}}>
-                        <QrCode className={`w-5 h-5 ${selectedQrTable === table ? "text-white" : "text-gray-400"}`} />
-                      </div>
-                      <span className="text-xs font-bold text-gray-700">{t.tableLabel} {table}</span>
+                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0" style={primaryStyle}>
+                    <span className="text-white">{restaurant?.logo ?? "🍽️"}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-gray-900 truncate">{restaurant?.name ?? "—"}</p>
+                    <p className="text-xs text-gray-400">{menuItems.length} صنف • {categories.length} قسم</p>
+                  </div>
+                  <Link href={restaurant ? `/menu/${restaurant.id}` : "#"} className="mr-auto">
+                    <button className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 border border-indigo-200 px-3 py-2 rounded-xl hover:bg-indigo-50 transition-colors">
+                      <Eye className="w-3.5 h-3.5" />
+                      معاينة
                     </button>
-                  ))}
+                  </Link>
                 </div>
-                {selectedQrTable && (
-                  <div className="border-t border-gray-100 p-5 bg-gray-50">
-                    <div className="flex items-center gap-5 mb-4">
-                      <div className="bg-white p-4 rounded-2xl shadow-sm">
-                        <QrCode className="w-20 h-20 text-gray-900" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900 mb-1">{restaurant?.name ?? "—"} — {t.tableLabel} {selectedQrTable}</p>
-                        <p className="text-sm text-gray-400">/menu/{restaurant?.id}?table={selectedQrTable}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <button className="flex-1 bg-gray-900 text-white text-sm font-bold py-3 rounded-2xl hover:bg-gray-800 transition-colors">
-                        {t.downloadPng}
-                      </button>
-                      <button className="flex-1 border border-gray-200 text-sm font-semibold text-gray-700 py-3 rounded-2xl hover:bg-gray-100 transition-colors">
-                        {t.copyLink}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ══ ORDERS TAB ══ */}
-          {activeTab === "orders" && (
-            <div className="space-y-4">
-              <div className="flex gap-2 flex-wrap">
-                {(["all", "pending", "preparing", "ready", "delivered"] as const).map(s => (
-                  <button
-                    key={s}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border ${
-                      s === "all" ? "border-transparent text-white" : ""
-                    } ${
-                      s === "pending" ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                      : s === "preparing" ? "border-blue-200 bg-blue-50 text-blue-700"
-                      : s === "ready" ? "border-green-200 bg-green-50 text-green-700"
-                      : s === "delivered" ? "border-gray-200 bg-gray-100 text-gray-500"
-                      : ""
-                    }`}
-                    style={s === "all" ? primaryStyle : {}}
-                  >
-                    {s === "all"
-                      ? `${t.statusAll} (${orders.length})`
-                      : `${STATUS_CONFIG[s].label} (${orders.filter(o => o.status === s).length})`
-                    }
-                  </button>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                {orders.map(order => {
-                  const cfg = STATUS_CONFIG[order.status];
-                  return (
-                    <div key={order.id} className={`bg-white border rounded-3xl p-5 transition-all shadow-sm ${
-                      order.status === "pending" ? "border-indigo-200" : "border-gray-100"
-                    }`}>
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white"
-                            style={primaryStyle}>
-                            {order.table_number}
-                          </div>
-                          <div>
-                            <p className="font-bold text-gray-900">{t.tableNo} {order.table_number}</p>
-                            <p className="text-xs text-gray-400">
-                              {new Date(order.created_at).toLocaleTimeString(lang === "ar" ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })}
-                            </p>
-                          </div>
-                        </div>
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${cfg.color}`}>
-                          {cfg.icon} {cfg.label}
-                        </span>
-                      </div>
-                      <div className="space-y-2 mb-4">
-                        {(order.items as { item_id: string; item_name: string; price: number; quantity: number }[]).map((line, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm">
-                            <span className="text-base">🍽️</span>
-                            <span className="flex-1 text-gray-700">{line.item_name}</span>
-                            <span className="text-gray-400">×{line.quantity}</span>
-                            <span className="font-semibold text-gray-900">{(line.price * line.quantity).toFixed(2)} {t.currency}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                        <div>
-                          <span className="text-xs text-gray-400">{t.total}: </span>
-                          <span className="font-black text-indigo-600">{order.total} {t.currency}</span>
-                        </div>
-                        {cfg.next && (
-                          <button
-                            onClick={() => advanceOrder(order.id)}
-                            className="text-white text-sm font-bold px-4 py-2 rounded-2xl hover:brightness-110 transition-all"
-                            style={primaryStyle}
-                          >
-                            {cfg.nextLabel}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {orders.length === 0 && (
-                  <div className="text-center py-16">
-                    <ShoppingBag className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-400">لا طلبات حالياً</p>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -1104,7 +850,8 @@ export default function DashboardPage() {
                   {[
                     { label: lang === "ar" ? "الاسم" : "Name", value: restaurant?.name ?? "—" },
                     { label: lang === "ar" ? "الباقة" : "Plan", value: planLabel(restaurant?.plan) },
-                    { label: lang === "ar" ? "عدد الطاولات" : "Tables", value: String(restaurant?.tables_count ?? "—") },
+                    { label: lang === "ar" ? "عدد الأصناف" : "Items", value: String(menuItems.length) },
+                    { label: lang === "ar" ? "عدد الأقسام" : "Categories", value: String(categories.length) },
                   ].map((row, i) => (
                     <div key={i} className="flex justify-between items-center text-sm py-1">
                       <span className="text-gray-400">{row.label}</span>

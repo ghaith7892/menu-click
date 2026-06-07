@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { CategoryRow, MenuItemExtra, MenuItemRow, OrderItem, OrderRow, OrderStatus, RestaurantRow } from "./database.types";
+import type { CategoryRow, MenuItemExtra, MenuItemRow, RestaurantRow } from "./database.types";
 
 // ─── Restaurant ─────────────────────────────────────────────
 export async function getRestaurantByOwner(ownerId: string): Promise<RestaurantRow | null> {
@@ -96,59 +96,6 @@ export async function deleteMenuItem(id: string) {
   return supabase.from("menu_items").delete().eq("id", id);
 }
 
-// ─── Orders ─────────────────────────────────────────────────
-export async function getOrders(restaurantId: string): Promise<OrderRow[]> {
-  const { data } = await supabase
-    .from("orders")
-    .select("*")
-    .eq("restaurant_id", restaurantId)
-    .order("created_at", { ascending: false });
-  return (data as OrderRow[]) ?? [];
-}
-
-export async function createOrder(order: {
-  restaurant_id: string;
-  table_number: number;
-  items: OrderItem[];
-  status: OrderStatus;
-  total: number;
-  customer_note: string | null;
-}) {
-  const { data, error } = await supabase
-    .from("orders")
-    .insert({ ...order, id: crypto.randomUUID() } as Record<string, unknown>)
-    .select()
-    .single();
-  return { data: data as OrderRow | null, error };
-}
-
-export async function updateOrderStatus(id: string, status: OrderStatus) {
-  const { data, error } = await supabase
-    .from("orders")
-    .update({ status } as Record<string, unknown>)
-    .eq("id", id)
-    .select()
-    .single();
-  return { data: data as OrderRow | null, error };
-}
-
-// ─── Realtime subscription for live orders ──────────────────
-export function subscribeToOrders(restaurantId: string, onUpdate: (orders: OrderRow[]) => void) {
-  const channel = supabase
-    .channel(`orders:${restaurantId}`)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${restaurantId}` },
-      async () => {
-        const orders = await getOrders(restaurantId);
-        onUpdate(orders);
-      }
-    )
-    .subscribe();
-
-  return () => supabase.removeChannel(channel);
-}
-
 // ─── Admin ──────────────────────────────────────────────────
 export async function getAllRestaurants(): Promise<RestaurantRow[]> {
   const { data } = await supabase
@@ -162,4 +109,4 @@ export async function updateRestaurantPlan(id: string, plan: RestaurantRow["plan
   return supabase.from("restaurants").update({ plan } as Record<string, unknown>).eq("id", id);
 }
 
-export type { MenuItemExtra, OrderItem };
+export type { MenuItemExtra };
