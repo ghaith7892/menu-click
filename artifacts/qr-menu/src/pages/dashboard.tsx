@@ -427,20 +427,8 @@ export default function DashboardPage() {
 
       {/* ── Top bar ── */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-        {/* Left: avatar + restaurant name */}
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-base shadow-sm flex-shrink-0"
-            style={primaryStyle}>
-            <span className="text-white">{restaurant?.logo ?? "🍽️"}</span>
-          </div>
-          <div className="flex items-center gap-1 text-sm">
-            <span className="font-bold text-gray-900 truncate max-w-[120px]">{restaurant?.name ?? user?.restaurantName ?? "مطعمك"}</span>
-            <span className="text-gray-300">›</span>
-            <span className="text-gray-400 text-xs">
-              {activeTab === "menu" ? "المنيو" : activeTab === "qr" ? "QR" : "الإعدادات"}
-            </span>
-          </div>
-        </div>
+        {/* Left: logo */}
+        <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-8 w-auto object-contain rounded-xl" />
 
         {/* Right: icon buttons */}
         <div className="flex items-center gap-1">
