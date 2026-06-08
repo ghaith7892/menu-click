@@ -428,7 +428,12 @@ export default function DashboardPage() {
       {/* ── Top bar ── */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between">
         {/* Left: logo */}
-        <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-8 w-auto object-contain rounded-xl" />
+        <img
+          src="/menuclick-logo.jpg"
+          alt="MenuClick"
+          className="rounded-2xl object-cover"
+          style={{ height: 32, width: 140, objectPosition: "50% 62%" }}
+        />
 
         {/* Right: icon buttons */}
         <div className="flex items-center gap-1">
