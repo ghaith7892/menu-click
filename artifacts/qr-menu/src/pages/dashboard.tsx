@@ -324,7 +324,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user?.id) return;
-    let unsubscribe: (() => void) | undefined;
     (async () => {
       setDataLoading(true);
       const rest = await getRestaurantByOwner(user.id);
@@ -355,9 +354,7 @@ export default function DashboardPage() {
     setAddingCategory(false);
     if (data) {
       setCategories(prev => [...prev, data as CategoryRow]);
-      setNewCatName("");
-      setNewCatIcon("🍽️");
-      setShowAddCategory(false);
+      setNewCatName(""); setNewCatIcon("🍽️"); setShowAddCategory(false);
     }
   };
 
@@ -375,23 +372,16 @@ export default function DashboardPage() {
     reader.readAsDataURL(file);
   };
 
-  const filteredItems = selectedCategory === "all"
-    ? menuItems
-    : menuItems.filter(i => i.category_id === selectedCategory);
-
-  const planLabel = (plan?: string) =>
-    plan === "pro" ? t.planPro : plan === "enterprise" ? t.planEnterprise : t.planFree;
-
   const handleSaveSettings = () => {
     setLang(pendingLang);
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2500);
   };
 
-  const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "menu",  label: t.menuMgmt, icon: <UtensilsCrossed className="w-5 h-5" /> },
-    { id: "qr",   label: t.qrCodes,  icon: <QrCode className="w-5 h-5" /> },
-  ];
+  const planLabel = (plan?: string) =>
+    plan === "pro" ? t.planPro : plan === "enterprise" ? t.planEnterprise : t.planFree;
+
+  const primaryStyle = { background: "linear-gradient(135deg, #7c3aed, #6366f1)" };
 
   if (dataLoading) {
     return (
@@ -401,473 +391,341 @@ export default function DashboardPage() {
     );
   }
 
-  const primaryStyle = { background: "linear-gradient(135deg, #7c3aed, #6366f1)" };
+  /* ── Shared category creation form ── */
+  const CategoryForm = showAddCategory ? (
+    <div className="bg-white border border-indigo-100 rounded-3xl p-4 mb-4 shadow-sm">
+      <p className="text-sm font-bold text-gray-900 mb-3">إضافة قسم جديد</p>
+      <div className="flex gap-1.5 flex-wrap mb-3">
+        {["🍽️","🍔","🍕","☕","🥗","🍰","🧃","🍣","🌮","🍜"].map(emoji => (
+          <button key={emoji} onClick={() => setNewCatIcon(emoji)}
+            className={`w-9 h-9 rounded-xl text-lg transition-all ${newCatIcon === emoji ? "bg-indigo-100 ring-2 ring-indigo-400" : "bg-gray-100 hover:bg-gray-200"}`}>
+            {emoji}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleAddCategory()}
+          placeholder="اسم القسم"
+          className="flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        <button onClick={handleAddCategory} disabled={!newCatName.trim() || addingCategory}
+          className="px-4 py-2.5 rounded-2xl text-white text-sm font-bold disabled:opacity-50 flex items-center gap-1"
+          style={primaryStyle}>
+          {addingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> إضافة</>}
+        </button>
+        <button onClick={() => { setShowAddCategory(false); setNewCatName(""); }}
+          className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-500">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden font-sans" dir={dir}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); .font-sans { font-family: 'Cairo', sans-serif; }`}</style>
+    <div className="min-h-screen bg-white font-sans" dir={dir}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); .font-sans { font-family: 'Cairo', sans-serif; } ::-webkit-scrollbar{display:none}`}</style>
 
-      {/* ── Sidebar ── */}
-      <aside className={`w-60 bg-white flex flex-col shrink-0 border-gray-100 ${dir === "rtl" ? "border-l" : "border-r"}`}
-        style={{ borderWidth: 1 }}>
-        <div className="p-5 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl shadow-sm"
-              style={primaryStyle}>
-              <span className="text-white text-lg">{restaurant?.logo ?? "🍽️"}</span>
-            </div>
-            <div className="min-w-0">
-              <p className="font-bold text-sm text-gray-900 truncate">{restaurant?.name ?? user?.restaurantName ?? "—"}</p>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
-                style={{ ...primaryStyle, fontSize: 10 }}>
-                {planLabel(restaurant?.plan ?? user?.plan)}
-              </span>
-            </div>
+      {/* ── Top bar ── */}
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+        {/* Left: avatar + restaurant name */}
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-base shadow-sm flex-shrink-0"
+            style={primaryStyle}>
+            <span className="text-white">{restaurant?.logo ?? "🍽️"}</span>
+          </div>
+          <div className="flex items-center gap-1 text-sm">
+            <span className="font-bold text-gray-900 truncate max-w-[120px]">{restaurant?.name ?? user?.restaurantName ?? "مطعمك"}</span>
+            <span className="text-gray-300">›</span>
+            <span className="text-gray-400 text-xs">
+              {activeTab === "menu" ? "المنيو" : activeTab === "qr" ? "QR" : "الإعدادات"}
+            </span>
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
-                activeTab === item.id
-                  ? "text-white shadow-sm"
-                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-              style={activeTab === item.id ? primaryStyle : {}}
+        {/* Right: icon buttons */}
+        <div className="flex items-center gap-1">
+          <button onClick={() => setActiveTab("menu")}
+            className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${activeTab === "menu" ? "text-white" : "text-gray-400 hover:bg-gray-100"}`}
+            style={activeTab === "menu" ? primaryStyle : {}}>
+            <UtensilsCrossed className="w-4 h-4" />
+          </button>
+          <button onClick={() => setActiveTab("qr")}
+            className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${activeTab === "qr" ? "text-white" : "text-gray-400 hover:bg-gray-100"}`}
+            style={activeTab === "qr" ? primaryStyle : {}}>
+            <QrCode className="w-4 h-4" />
+          </button>
+          <button onClick={() => setActiveTab("settings")}
+            className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${activeTab === "settings" ? "text-white" : "text-gray-400 hover:bg-gray-100"}`}
+            style={activeTab === "settings" ? primaryStyle : {}}>
+            <Settings className="w-4 h-4" />
+          </button>
+          <button onClick={handleLogout}
+            className="w-9 h-9 rounded-2xl flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-400 transition-all">
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* ── Page content ── */}
+      <div className="max-w-lg mx-auto px-4 pb-28">
+
+        {/* ══ MENU TAB ══ */}
+        {activeTab === "menu" && (
+          <>
+            {/* Cover photo */}
+            <input ref={coverFileRef} type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
+            <div
+              className="relative mt-4 rounded-3xl overflow-hidden cursor-pointer group"
+              style={{ height: 220 }}
+              onClick={() => coverFileRef.current?.click()}
             >
-              {item.icon}
-              <span className="flex-1 text-start">{item.label}</span>
-            </button>
-          ))}
-        </nav>
+              {restaurant?.cover_color?.startsWith("data:") ? (
+                <img src={restaurant.cover_color} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full"
+                  style={{ background: restaurant?.cover_color ?? "linear-gradient(135deg, #e0e7ff, #c7d2fe)" }} />
+              )}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-2xl px-4 py-2 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  {coverSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ الرفع...</> : <><Camera className="w-4 h-4" /> تغيير الغلاف</>}
+                </div>
+              </div>
+            </div>
 
-        <div className="p-3 border-t border-gray-100 space-y-1">
-          <button
-            onClick={() => setActiveTab("settings")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
-              activeTab === "settings" ? "text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-            }`}
-            style={activeTab === "settings" ? primaryStyle : {}}
-          >
-            <Settings className="w-5 h-5" />
-            <span className="flex-1 text-start">{t.settings}</span>
-          </button>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold text-gray-500 hover:bg-red-50 hover:text-red-500 transition-all"
-          >
-            <LogOut className="w-5 h-5" />
-            <span className="flex-1 text-start">{t.logout}</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Main ── */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Header */}
-        <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="font-bold text-lg text-gray-900">
-              {activeTab === "settings" ? t.settings : navItems.find(n => n.id === activeTab)?.label}
-            </h1>
-            <p className="text-xs text-gray-400">{t.welcome}، {user?.name ?? "—"} 👋</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
-              <button className="flex items-center gap-2 text-sm font-semibold text-gray-600 border border-gray-200 px-3 py-2 rounded-2xl hover:bg-gray-50 transition-colors">
-                <Eye className="w-4 h-4" />
-                {t.previewMenu}
+            {/* Category pills */}
+            <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+              <button className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
+                <Pencil className="w-4 h-4 text-white" />
               </button>
-            </Link>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-6">
-
-          {/* ══ MENU TAB (Menusa style) ══ */}
-          {activeTab === "menu" && (
-            <div className="max-w-2xl space-y-0">
-
-              {/* Cover photo */}
-              <input
-                ref={coverFileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleCoverUpload}
-              />
-              <div
-                className="relative h-44 rounded-3xl overflow-hidden mb-4 group cursor-pointer"
-                onClick={() => coverFileRef.current?.click()}
-                style={{
-                  background: restaurant?.cover_color?.startsWith("data:")
-                    ? "none"
-                    : (restaurant?.cover_color ?? "linear-gradient(135deg, #e0e7ff, #c7d2fe)"),
-                }}
-              >
-                {/* If cover is an uploaded image */}
-                {restaurant?.cover_color?.startsWith("data:") && (
-                  <img
-                    src={restaurant.cover_color}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                )}
-                {/* Hover overlay */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
-                  <div className="bg-white/90 rounded-2xl px-4 py-2 flex items-center gap-2 text-sm font-semibold text-gray-800">
-                    {coverSaving
-                      ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ الرفع...</>
-                      : <><Camera className="w-4 h-4" /> تغيير الغلاف</>
-                    }
-                  </div>
-                </div>
-                <div className="absolute bottom-3 right-3">
-                  <div className="w-10 h-10 rounded-2xl bg-white/80 backdrop-blur flex items-center justify-center text-lg shadow">
-                    {restaurant?.logo ?? "🍽️"}
-                  </div>
-                </div>
-              </div>
-
-              {/* Category pills */}
-              <div className="flex gap-2 flex-wrap mb-5">
-                {/* Edit icon pill */}
-                <button className="w-9 h-9 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
-                  <Pencil className="w-4 h-4 text-white" />
+              {categories.map(cat => (
+                <button key={cat.id} onClick={() => setSelectedCategory(cat.id)}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+                    selectedCategory === cat.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}>
+                  {cat.icon} {cat.name}
                 </button>
-                {/* All pill */}
-                <button
-                  onClick={() => setSelectedCategory("all")}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${
-                    selectedCategory === "all"
-                      ? "bg-gray-900 text-white"
-                      : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"
-                  }`}
-                >
-                  {t.all}
-                </button>
-                {categories.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
-                      selectedCategory === cat.id
-                        ? "bg-gray-900 text-white"
-                        : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"
-                    }`}
-                  >
-                    {cat.icon} {cat.name}
-                  </button>
-                ))}
-                {/* Dashed add category */}
-                <button
-                  onClick={() => setShowAddCategory(true)}
-                  className="flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-indigo-600 transition-all hover:bg-indigo-50"
-                  style={{ border: "2px dashed #6366f1" }}
-                >
-                  <Plus className="w-3.5 h-3.5" /> {t.newCategory}
-                </button>
-              </div>
+              ))}
+              <button onClick={() => setShowAddCategory(true)}
+                className="flex-shrink-0 flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-all"
+                style={{ border: "2px dashed #6366f1" }}>
+                <Plus className="w-3.5 h-3.5" /> + add category
+              </button>
+            </div>
 
-              {/* Inline category creation form */}
-              {showAddCategory && (
-                <div className="bg-white border border-indigo-200 rounded-3xl p-4 mb-4 shadow-sm">
-                  <p className="text-sm font-bold text-gray-900 mb-3">إضافة قسم جديد</p>
-                  <div className="flex gap-2 mb-3">
-                    {/* Icon picker */}
-                    <div className="flex gap-1.5 flex-wrap">
-                      {["🍽️","🍔","🍕","☕","🥗","🍰","🧃","🍣","🌮","🍜"].map(emoji => (
-                        <button
-                          key={emoji}
-                          onClick={() => setNewCatIcon(emoji)}
-                          className={`w-9 h-9 rounded-xl text-lg transition-all ${newCatIcon === emoji ? "bg-indigo-100 ring-2 ring-indigo-400" : "bg-gray-100 hover:bg-gray-200"}`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      autoFocus
-                      value={newCatName}
-                      onChange={e => setNewCatName(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && handleAddCategory()}
-                      placeholder="اسم القسم (مثال: مشروبات)"
-                      className="flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    />
-                    <button
-                      onClick={handleAddCategory}
-                      disabled={!newCatName.trim() || addingCategory}
-                      className="px-4 py-2.5 rounded-2xl text-white text-sm font-bold disabled:opacity-50 flex items-center gap-1.5"
-                      style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}
-                    >
-                      {addingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> إضافة</>}
-                    </button>
-                    <button
-                      onClick={() => { setShowAddCategory(false); setNewCatName(""); }}
-                      className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
+            {/* Category form */}
+            <div className="mt-3">{CategoryForm}</div>
+
+            {/* Per-category sections */}
+            {(selectedCategory === "all" ? categories : categories.filter(c => c.id === selectedCategory)).map(cat => {
+              const catItems = menuItems.filter(i => i.category_id === cat.id);
+              return (
+                <div key={cat.id} className="mt-5">
+                  {/* Section header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-black text-gray-900 text-xl">{cat.name}</h3>
+                    <button onClick={() => setShowAddItem(true)}
+                      className="w-10 h-10 rounded-2xl bg-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors">
+                      <Plus className="w-5 h-5 text-white" />
                     </button>
                   </div>
-                </div>
-              )}
 
-              {/* Section header */}
-              {categories.filter(c => selectedCategory === "all" || c.id === selectedCategory).map(cat => {
-                const catItems = menuItems.filter(i => i.category_id === cat.id);
-                return (
-                  <div key={cat.id} className="mb-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-black text-gray-900 text-lg">{cat.icon} {cat.name}</h3>
-                      <button
-                        onClick={() => setShowAddItem(true)}
-                        className="w-9 h-9 rounded-2xl bg-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors"
-                      >
-                        <Plus className="w-5 h-5 text-white" />
-                      </button>
-                    </div>
-
-                    {/* 2-col product grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {catItems.map(item => (
-                        <div key={item.id}
-                          className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group cursor-pointer hover:border-indigo-200 transition-all">
-                          {/* Image */}
-                          <div className="relative h-32 bg-gray-100 flex items-center justify-center text-4xl">
-                            {item.image
-                              ? <img src={item.image} className="w-full h-full object-cover" />
-                              : <span>{item.image ?? "🍽️"}</span>
-                            }
-                            {/* Delete on hover */}
-                            <button
-                              onClick={() => handleDeleteItem(item.id)}
-                              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          {/* Info */}
-                          <div className="p-3">
-                            <p className="text-sm font-black text-gray-900">من {item.price} {t.currency}</p>
-                            <p className="text-xs text-gray-500 mt-0.5 truncate">{item.name}</p>
-                            {item.is_popular && (
-                              <p className="text-[10px] text-gray-400 mt-1">🔥 {t.popular}</p>
-                            )}
-                          </div>
+                  {/* 2-col grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {catItems.map(item => (
+                      <div key={item.id}
+                        className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group hover:shadow-md transition-all">
+                        <div className="relative h-36 bg-gray-100 flex items-center justify-center text-4xl overflow-hidden">
+                          {item.image
+                            ? <img src={item.image} className="w-full h-full object-cover" />
+                            : <span className="text-4xl">🍽️</span>
+                          }
+                          <button onClick={() => handleDeleteItem(item.id)}
+                            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                      ))}
+                        <div className="p-3">
+                          <p className="text-sm font-black text-gray-900">من {item.price} {t.currency}</p>
+                          <p className="text-sm text-gray-600 mt-0.5 truncate">{item.name}</p>
+                          {item.description && (
+                            <p className="text-xs text-gray-400 mt-1 truncate">من {item.description}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
 
-                      {/* Add item dashed card */}
-                      <button
-                        onClick={() => setShowAddItem(true)}
-                        className="h-52 rounded-3xl flex flex-col items-center justify-center gap-2 text-indigo-600 font-semibold text-sm hover:bg-indigo-50 transition-colors"
-                        style={{ border: "2px dashed #6366f1" }}
-                      >
-                        <Plus className="w-6 h-6" />
-                        <span>{t.addItem}</span>
-                      </button>
-                    </div>
+                    {/* Dashed add card */}
+                    <button onClick={() => setShowAddItem(true)}
+                      className="rounded-3xl flex flex-col items-center justify-center gap-2 text-indigo-600 font-semibold text-sm hover:bg-indigo-50 transition-colors"
+                      style={{ minHeight: 200, border: "2px dashed #6366f1" }}>
+                      <Plus className="w-7 h-7" />
+                      <span>add item</span>
+                    </button>
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
 
-              {/* If no categories yet */}
-              {categories.length === 0 && (
-                <div className="text-center py-16">
+            {/* Empty state */}
+            {categories.length === 0 && (
+              <div className="mt-8 text-center">
+                <button onClick={() => setShowAddCategory(true)}
+                  className="w-full rounded-3xl flex flex-col items-center justify-center gap-3 py-16 text-indigo-600 font-semibold"
+                  style={{ border: "2px dashed #6366f1" }}>
+                  <Plus className="w-8 h-8" />
+                  <span>أضف قسماً للبدء</span>
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ══ QR TAB ══ */}
+        {activeTab === "qr" && (
+          <div className="mt-6 space-y-4">
+            <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+              <div className="p-5">
+                <h3 className="font-bold text-gray-900 mb-1">{t.restaurantQr}</h3>
+                <p className="text-sm text-gray-400 mb-5">{t.restaurantQrDesc}</p>
+
+                <div className="flex items-center justify-center py-10 bg-gray-50 rounded-3xl mb-5">
+                  <div className="bg-white p-6 rounded-3xl shadow-md text-center">
+                    <QrCode className="w-36 h-36 text-gray-900 mx-auto" />
+                    <p className="mt-4 text-sm font-bold text-gray-900">{restaurant?.name ?? "—"}</p>
+                    <p className="text-xs text-gray-400 mt-1">{t.scanToView}</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={primaryStyle}>
+                    <Link2 className="w-4 h-4 text-white" />
+                  </div>
+                  <p className="text-xs text-gray-500 flex-1 truncate" dir="ltr">
+                    {typeof window !== "undefined" ? window.location.origin : ""}/menu/{restaurant?.id ?? "…"}
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
                   <button
-                    onClick={() => setShowAddItem(true)}
-                    className="h-40 w-full rounded-3xl flex flex-col items-center justify-center gap-2 text-indigo-600 font-semibold text-sm"
-                    style={{ border: "2px dashed #6366f1" }}
-                  >
-                    <Plus className="w-8 h-8" />
-                    <span>{t.addItem}</span>
+                    onClick={() => { const url = `${window.location.origin}/menu/${restaurant?.id}`; navigator.clipboard.writeText(url); }}
+                    className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors">
+                    <Link2 className="w-4 h-4" /> {t.copyLink}
+                  </button>
+                  <button className="flex-1 flex items-center justify-center gap-2 text-white font-bold py-4 rounded-2xl text-sm hover:brightness-110 transition-all"
+                    style={primaryStyle}>
+                    <QrCode className="w-4 h-4" /> {t.downloadQr}
                   </button>
                 </div>
-              )}
+              </div>
+            </div>
 
-              {/* Preview floating button */}
-              <div className={`fixed bottom-8 ${dir === "rtl" ? "left-8" : "right-8"} z-40`}>
+            <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-bold text-gray-900 text-sm">حالة المنيو</p>
+                <span className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-3 py-1.5 rounded-full border border-green-100">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> نشط
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0" style={primaryStyle}>
+                  <span className="text-white">{restaurant?.logo ?? "🍽️"}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-sm text-gray-900 truncate">{restaurant?.name ?? "—"}</p>
+                  <p className="text-xs text-gray-400">{menuItems.length} صنف • {categories.length} قسم</p>
+                </div>
                 <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
-                  <button className="flex items-center gap-2 bg-white border border-gray-200 text-gray-800 font-semibold text-sm px-5 py-3 rounded-full shadow-lg hover:shadow-xl transition-all">
-                    <Eye className="w-4 h-4" />
-                    معاينة
+                  <button className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 border border-indigo-200 px-3 py-2 rounded-xl hover:bg-indigo-50 transition-colors">
+                    <Eye className="w-3.5 h-3.5" /> معاينة
                   </button>
                 </Link>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ══ QR TAB ══ */}
-          {activeTab === "qr" && (
-            <div className="max-w-md space-y-6">
-              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-                <div className="p-6">
-                  <h3 className="font-bold text-gray-900 mb-1">{t.restaurantQr}</h3>
-                  <p className="text-sm text-gray-400 mb-5">{t.restaurantQrDesc}</p>
-
-                  {/* QR Code display */}
-                  <div className="flex items-center justify-center py-10 bg-gray-50 rounded-3xl mb-5">
-                    <div className="bg-white p-6 rounded-3xl shadow-md text-center">
-                      <QrCode className="w-36 h-36 text-gray-900 mx-auto" />
-                      <p className="mt-4 text-sm font-bold text-gray-900">{restaurant?.name ?? "—"}</p>
-                      <p className="text-xs text-gray-400 mt-1">{t.scanToView}</p>
-                    </div>
-                  </div>
-
-                  {/* Menu URL */}
-                  <div className="bg-gray-50 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={primaryStyle}>
-                      <Link2 className="w-4 h-4 text-white" />
-                    </div>
-                    <p className="text-xs text-gray-500 flex-1 truncate" dir="ltr">
-                      {typeof window !== "undefined" ? window.location.origin : ""}/menu/{restaurant?.id ?? "…"}
-                    </p>
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        const url = `${window.location.origin}/menu/${restaurant?.id}`;
-                        navigator.clipboard.writeText(url);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors"
-                    >
-                      <Link2 className="w-4 h-4" />
-                      {t.copyLink}
-                    </button>
-                    <button
-                      className="flex-1 flex items-center justify-center gap-2 text-white font-bold py-4 rounded-2xl text-sm hover:brightness-110 transition-all"
-                      style={primaryStyle}
-                    >
-                      <QrCode className="w-4 h-4" />
-                      {t.downloadQr}
-                    </button>
-                  </div>
+        {/* ══ SETTINGS TAB ══ */}
+        {activeTab === "settings" && (
+          <div className="mt-6 space-y-4">
+            <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+              <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl flex items-center justify-center" style={{ background: "#eef2ff" }}>
+                  <Globe className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-gray-900">{t.languageSection}</p>
+                  <p className="text-xs text-gray-400">{t.languageDesc}</p>
                 </div>
               </div>
-
-              {/* Status card */}
-              <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-bold text-gray-900 text-sm">حالة المنيو</p>
-                    <p className="text-xs text-gray-400 mt-0.5">المنيو مرئي للزوار عند مسح الكود</p>
-                  </div>
-                  <span className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-3 py-1.5 rounded-full border border-green-100">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    نشط
-                  </span>
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0" style={primaryStyle}>
-                    <span className="text-white">{restaurant?.logo ?? "🍽️"}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm text-gray-900 truncate">{restaurant?.name ?? "—"}</p>
-                    <p className="text-xs text-gray-400">{menuItems.length} صنف • {categories.length} قسم</p>
-                  </div>
-                  <Link href={restaurant ? `/menu/${restaurant.id}` : "#"} className="mr-auto">
-                    <button className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 border border-indigo-200 px-3 py-2 rounded-xl hover:bg-indigo-50 transition-colors">
-                      <Eye className="w-3.5 h-3.5" />
-                      معاينة
-                    </button>
-                  </Link>
-                </div>
+              <div className="p-5 space-y-3">
+                {(["ar", "en"] as Lang[]).map(l => (
+                  <label key={l} onClick={() => setPendingLang(l)}
+                    className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all ${pendingLang === l ? "border-indigo-500 bg-indigo-50" : "border-gray-100 hover:border-gray-200"}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{l === "ar" ? "🇸🇦" : "🇺🇸"}</span>
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900">{l === "ar" ? t.arabic : t.english}</p>
+                        <p className="text-xs text-gray-400">{l === "ar" ? "RTL — من اليمين لليسار" : "LTR — Left to right"}</p>
+                      </div>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${pendingLang === l ? "border-indigo-500 bg-indigo-500" : "border-gray-300"}`}>
+                      {pendingLang === l && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div className="px-5 pb-5">
+                <button onClick={handleSaveSettings}
+                  className="w-full text-white font-bold py-3.5 rounded-2xl hover:brightness-110 transition-all"
+                  style={primaryStyle}>
+                  {settingsSaved ? t.settingsSaved : t.saveSettings}
+                </button>
               </div>
             </div>
-          )}
 
-          {/* ══ SETTINGS TAB ══ */}
-          {activeTab === "settings" && (
-            <div className="max-w-xl space-y-4">
-              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-gray-100 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-2xl flex items-center justify-center"
-                    style={{ background: "#eef2ff" }}>
-                    <Globe className="w-5 h-5 text-indigo-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-sm text-gray-900">{t.languageSection}</p>
-                    <p className="text-xs text-gray-400">{t.languageDesc}</p>
-                  </div>
+            <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+              <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-xl bg-gray-50">
+                  {restaurant?.logo ?? "🍽️"}
                 </div>
-                <div className="p-5 space-y-3">
-                  {(["ar", "en"] as Lang[]).map(l => (
-                    <label
-                      key={l}
-                      onClick={() => setPendingLang(l)}
-                      className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                        pendingLang === l ? "border-indigo-500 bg-indigo-50" : "border-gray-100 hover:border-gray-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{l === "ar" ? "🇸🇦" : "🇺🇸"}</span>
-                        <div>
-                          <p className="font-semibold text-sm text-gray-900">
-                            {l === "ar" ? t.arabic : t.english}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {l === "ar" ? "RTL — من اليمين لليسار" : "LTR — Left to right"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                        pendingLang === l ? "border-indigo-500 bg-indigo-500" : "border-gray-300"
-                      }`}>
-                        {pendingLang === l && <div className="w-2 h-2 rounded-full bg-white" />}
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                <div className="px-5 pb-5">
-                  <button
-                    onClick={handleSaveSettings}
-                    className="w-full text-white font-bold py-3.5 rounded-2xl hover:brightness-110 transition-all"
-                    style={primaryStyle}
-                  >
-                    {settingsSaved ? t.settingsSaved : t.saveSettings}
-                  </button>
+                <div>
+                  <p className="font-bold text-sm text-gray-900">{t.restaurantInfo}</p>
+                  <p className="text-xs text-gray-400">{t.restaurantInfoDesc}</p>
                 </div>
               </div>
-
-              <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-gray-100 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-xl bg-gray-50">
-                    {restaurant?.logo ?? "🍽️"}
+              <div className="p-5 space-y-3">
+                {[
+                  { label: lang === "ar" ? "الاسم" : "Name", value: restaurant?.name ?? "—" },
+                  { label: lang === "ar" ? "الباقة" : "Plan", value: planLabel(restaurant?.plan) },
+                  { label: lang === "ar" ? "عدد الأصناف" : "Items", value: String(menuItems.length) },
+                  { label: lang === "ar" ? "عدد الأقسام" : "Categories", value: String(categories.length) },
+                ].map((row, i) => (
+                  <div key={i} className="flex justify-between items-center text-sm py-1">
+                    <span className="text-gray-400">{row.label}</span>
+                    <span className="font-semibold text-gray-900">{row.value}</span>
                   </div>
-                  <div>
-                    <p className="font-bold text-sm text-gray-900">{t.restaurantInfo}</p>
-                    <p className="text-xs text-gray-400">{t.restaurantInfoDesc}</p>
-                  </div>
-                </div>
-                <div className="p-5 space-y-3">
-                  {[
-                    { label: lang === "ar" ? "الاسم" : "Name", value: restaurant?.name ?? "—" },
-                    { label: lang === "ar" ? "الباقة" : "Plan", value: planLabel(restaurant?.plan) },
-                    { label: lang === "ar" ? "عدد الأصناف" : "Items", value: String(menuItems.length) },
-                    { label: lang === "ar" ? "عدد الأقسام" : "Categories", value: String(categories.length) },
-                  ].map((row, i) => (
-                    <div key={i} className="flex justify-between items-center text-sm py-1">
-                      <span className="text-gray-400">{row.label}</span>
-                      <span className="font-semibold text-gray-900">{row.value}</span>
-                    </div>
-                  ))}
-                  <button className="w-full mt-2 border border-gray-200 text-gray-700 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-all text-sm">
-                    {t.editInfo}
-                  </button>
-                </div>
+                ))}
+                <button className="w-full mt-2 border border-gray-200 text-gray-700 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-all text-sm">
+                  {t.editInfo}
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
+      </div>
 
+      {/* ── Floating preview button (peach/orange like reference) ── */}
+      {activeTab === "menu" && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
+            <button className="flex items-center gap-2.5 font-bold text-sm px-6 py-3.5 rounded-full shadow-xl hover:shadow-2xl transition-all"
+              style={{ background: "#ffe8d4", color: "#c2440b" }}>
+              <Eye className="w-4 h-4" />
+              preview
+            </button>
+          </Link>
         </div>
-      </main>
+      )}
 
       {/* ── Item Modal ── */}
       <ItemModal
