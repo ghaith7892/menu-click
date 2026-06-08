@@ -37,11 +37,10 @@ export default function LoginPage() {
         <div className="absolute top-0 left-0 w-96 h-96 bg-white/5 rounded-full -translate-x-1/2 -translate-y-1/2" />
         <div className="absolute bottom-0 right-0 w-72 h-72 bg-white/5 rounded-full translate-x-1/3 translate-y-1/3" />
         <div className="relative flex flex-col h-full">
-          <div className="flex items-center gap-3 mb-auto">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-              <QrCode className="w-5 h-5 text-white" />
+          <div className="mb-auto">
+            <div className="inline-block bg-white rounded-2xl px-3 py-1.5 shadow-sm">
+              <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-8 w-auto object-contain" />
             </div>
-            <span className="font-black text-white text-lg">منيو باركود</span>
           </div>
           <div className="mb-auto">
             <h2 className="text-4xl font-black text-white leading-tight mb-5">
@@ -83,11 +82,8 @@ export default function LoginPage() {
           </button>
 
           {/* Logo (mobile only) */}
-          <div className="flex items-center gap-2.5 mb-8 lg:hidden">
-            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
-              <QrCode className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-black text-foreground text-lg">منيو باركود</span>
+          <div className="mb-8 lg:hidden">
+            <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-10 w-auto object-contain rounded-xl" />
           </div>
 
           <h1 className="text-2xl font-black text-foreground mb-1">أهلاً بك مجدداً 👋</h1>

@@ -108,11 +108,8 @@ export default function LandingPage() {
               تسجيل الدخول
             </button>
           </Link>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
-              <QrCode className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-white font-bold text-sm">منيو باركود</span>
+          <div className="bg-white rounded-2xl px-3 py-1 shadow-sm">
+            <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-7 w-auto object-contain" />
           </div>
         </div>
 

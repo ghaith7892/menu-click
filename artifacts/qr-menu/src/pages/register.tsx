@@ -89,11 +89,8 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-background" dir="rtl">
       <div className="max-w-2xl mx-auto px-4 py-12">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2.5 mb-10">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-sm">
-            <QrCode className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-black text-foreground text-xl">منيو باركود</span>
+        <div className="flex items-center justify-center mb-10">
+          <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-12 w-auto object-contain rounded-xl" />
         </div>
 
         {/* Step indicator */}
