@@ -109,7 +109,7 @@ export default function LandingPage() {
             </button>
           </Link>
           <div className="bg-white rounded-2xl px-3 py-1 shadow-sm">
-            <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-7 w-auto object-contain" />
+            <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-10 w-auto object-contain" />
           </div>
         </div>
 
