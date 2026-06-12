@@ -10,7 +10,7 @@ import {
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
   getRestaurantByOwner, getCategories, getMenuItems,
-  deleteMenuItem, createMenuItem,
+  deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant
 } from "@/lib/api";
 import { Link, useLocation } from "wouter";
@@ -302,6 +302,224 @@ function ItemModal({
   );
 }
 
+/* ─── Edit Item Modal ─────────────────────────────── */
+function EditItemModal({
+  item, open, onClose, categories, onSave, onDelete,
+}: {
+  item: MenuItemRow | null;
+  open: boolean;
+  onClose: () => void;
+  categories: CategoryRow[];
+  onSave: (updated: MenuItemRow) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [selectedCat, setSelectedCat] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [hideFromMenu, setHideFromMenu] = useState(false);
+  const [outOfStock, setOutOfStock] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (item) {
+      setSelectedCat(item.category_id ?? categories[0]?.id ?? "");
+      setName(item.name ?? "");
+      setDescription(item.description ?? "");
+      setPrice(String(item.price ?? ""));
+      setPhoto(item.image?.startsWith("data:") || item.image?.startsWith("http") ? item.image : null);
+      setHideFromMenu(item.is_available === false && !item.is_popular);
+      setOutOfStock(item.is_available === false);
+      setSaveError("");
+      setConfirmDelete(false);
+    }
+  }, [item, categories]);
+
+  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result;
+      if (typeof result === "string") setPhoto(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = async () => {
+    if (!item) return;
+    if (!name.trim()) { setSaveError("يرجى إدخال اسم الصنف"); return; }
+    setSaving(true); setSaveError("");
+    const { data, error } = await updateMenuItem(item.id, {
+      name: name.trim(),
+      description: description.trim() || null,
+      price: parseFloat(price) || 0,
+      image: photo,
+      category_id: selectedCat,
+      is_available: !outOfStock,
+    });
+    setSaving(false);
+    if (error || !data) { setSaveError("حدث خطأ أثناء الحفظ، حاول مجدداً"); return; }
+    onSave(data);
+    onClose();
+  };
+
+  const handleDelete = async () => {
+    if (!item) return;
+    await deleteMenuItem(item.id);
+    onDelete(item.id);
+    onClose();
+  };
+
+  if (!open || !item) return null;
+
+  const inputCls = "w-full bg-gray-100 rounded-2xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-lg bg-white rounded-t-3xl overflow-y-auto shadow-2xl"
+        style={{ maxHeight: "92vh" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <button className="text-indigo-400 text-sm font-semibold" onClick={handleSave}>حفظ</button>
+          <h3 className="font-bold text-gray-900 text-base">تعديل الصنف</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+
+          {/* Category */}
+          <div className="flex items-center justify-between bg-gray-100 rounded-2xl px-4 py-3.5">
+            <select
+              value={selectedCat}
+              onChange={e => setSelectedCat(e.target.value)}
+              className="bg-transparent text-sm text-gray-900 font-medium flex-1 focus:outline-none appearance-none"
+            >
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </select>
+            <span className="text-gray-400 text-sm">›</span>
+          </div>
+
+          {/* Name */}
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="الاسم" className={inputCls} />
+
+          {/* Price */}
+          <div>
+            <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، ر.س</p>
+            <input
+              type="number"
+              value={price}
+              onChange={e => setPrice(e.target.value)}
+              placeholder="0"
+              className={inputCls}
+            />
+          </div>
+
+          {/* Description */}
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="وصف شهي جداً..."
+            rows={3}
+            className={inputCls + " resize-none"}
+          />
+
+          {/* Photo */}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
+          {photo ? (
+            <div className="relative w-36">
+              <img src={photo} className="w-36 h-28 rounded-2xl object-cover" />
+              <button
+                onClick={() => setPhoto(null)}
+                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="w-36 h-28 rounded-2xl flex flex-col items-center justify-center gap-1 text-indigo-600 font-semibold text-sm"
+              style={{ border: "2px dashed #6366f1" }}
+            >
+              <Camera className="w-5 h-5" />
+              <span className="text-xs leading-tight text-center">أضف<br/>صورة</span>
+            </button>
+          )}
+
+          {/* Toggles */}
+          <div className="space-y-3">
+            <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">إخفاء من المنيو</p>
+                <p className="text-xs text-gray-400 mt-0.5">سيظهر الصنف لك فقط</p>
+              </div>
+              <Toggle value={hideFromMenu} onChange={setHideFromMenu} />
+            </div>
+            <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">غير متوفر</p>
+                <p className="text-xs text-gray-400 mt-0.5">سيرى الضيوف أنه سيكون متاحاً لاحقاً</p>
+              </div>
+              <Toggle value={outOfStock} onChange={setOutOfStock} />
+            </div>
+          </div>
+
+          {/* Error */}
+          {saveError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-2xl">
+              {saveError}
+            </div>
+          )}
+
+          {/* Save */}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full py-4 rounded-2xl text-white font-bold text-base mt-2 hover:brightness-110 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}
+          >
+            {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> جارٍ الحفظ...</> : "حفظ التعديلات"}
+          </button>
+
+          {/* Delete */}
+          {confirmDelete ? (
+            <div className="flex gap-3">
+              <button onClick={handleDelete} className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm">
+                تأكيد الحذف
+              </button>
+              <button onClick={() => setConfirmDelete(false)} className="flex-1 py-3 rounded-2xl bg-gray-100 text-gray-700 font-bold text-sm">
+                إلغاء
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full py-3 rounded-2xl bg-red-50 text-red-500 font-bold text-sm flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" /> حذف الصنف
+            </button>
+          )}
+
+          <div className="h-2" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Dashboard ──────────────────────────────── */
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -314,6 +532,7 @@ export default function DashboardPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAddItem, setShowAddItem] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItemRow | null>(null);
   const [pendingLang, setPendingLang] = useState<Lang>(lang);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -533,22 +752,27 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     {catItems.map(item => (
                       <div key={item.id}
-                        className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group hover:shadow-md transition-all">
+                        onClick={() => setEditingItem(item)}
+                        className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group hover:shadow-md transition-all cursor-pointer">
                         <div className="relative h-36 bg-gray-100 flex items-center justify-center text-4xl overflow-hidden">
                           {item.image
                             ? <img src={item.image} className="w-full h-full object-cover" />
                             : <span className="text-4xl">🍽️</span>
                           }
-                          <button onClick={() => handleDeleteItem(item.id)}
-                            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </div>
+                          {!item.is_available && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded-full">غير متوفر</span>
+                            </div>
+                          )}
                         </div>
                         <div className="p-3">
                           <p className="text-sm font-black text-gray-900">من {item.price} {t.currency}</p>
                           <p className="text-sm text-gray-600 mt-0.5 truncate">{item.name}</p>
                           {item.description && (
-                            <p className="text-xs text-gray-400 mt-1 truncate">من {item.description}</p>
+                            <p className="text-xs text-gray-400 mt-1 truncate">{item.description}</p>
                           )}
                         </div>
                       </div>
@@ -742,13 +966,23 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Item Modal ── */}
+      {/* ── Add Item Modal ── */}
       <ItemModal
         open={showAddItem}
         onClose={() => setShowAddItem(false)}
         categories={categories}
         restaurantId={restaurant?.id ?? ""}
         onAdd={(item) => setMenuItems(prev => [...prev, item])}
+      />
+
+      {/* ── Edit Item Modal ── */}
+      <EditItemModal
+        item={editingItem}
+        open={!!editingItem}
+        onClose={() => setEditingItem(null)}
+        categories={categories}
+        onSave={(updated) => setMenuItems(prev => prev.map(i => i.id === updated.id ? updated : i))}
+        onDelete={(id) => setMenuItems(prev => prev.filter(i => i.id !== id))}
       />
     </div>
   );
