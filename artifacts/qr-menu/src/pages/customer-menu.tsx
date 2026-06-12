@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
 import { getRestaurantById, getCategories, getMenuItems } from "@/lib/api";
 
 export default function CustomerMenuPage() {
   const params = useParams<{ restaurantId: string }>();
   const restaurantId = params.restaurantId;
+  const [, navigate] = useLocation();
 
   const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -63,7 +64,7 @@ export default function CustomerMenuPage() {
         <div className="absolute inset-0 bg-black/40" />
         <div className="relative px-4 pt-10 pb-8 text-center">
           <button
-            onClick={() => window.history.back()}
+            onClick={() => { if (window.history.length > 1) window.history.back(); else navigate("/dashboard"); }}
             className="absolute top-4 right-4 w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
           >
             <ChevronRight className="w-5 h-5 text-white" />
