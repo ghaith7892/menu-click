@@ -108,7 +108,7 @@ export default function LandingPage() {
               تسجيل الدخول
             </button>
           </Link>
-          <img src="/menuclick-logo-black-nobg.png" alt="MenuClick" className="h-12 w-auto object-contain" />
+          <img src="/menuclick-logo-black-nobg.png" alt="MenuClick" className="h-16 w-auto object-contain" />
         </div>
 
         {/* Headline */}
