@@ -110,7 +110,13 @@ function ItemModal({
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setPhoto(URL.createObjectURL(file));
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result;
+      if (typeof result === "string") setPhoto(result);
+    };
+    reader.readAsDataURL(file);
   };
 
   if (!open) return null;
