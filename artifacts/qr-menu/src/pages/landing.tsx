@@ -135,11 +135,10 @@ export default function LandingPage() {
             </Link>
 
             {/* QR preview */}
-            <Link href="/register" className="block">
+            <Link href="/login" className="block">
               <button className="w-full text-white font-bold py-3.5 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
                 style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}>
-                <QrCode className="w-4 h-4" />
-                معاينة QR
+                تسجيل الدخول
               </button>
             </Link>
 
