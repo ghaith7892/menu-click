@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { QrCode, Check, Star, ChevronDown, Eye } from "lucide-react";
+import { QrCode, Check, Star, ChevronDown, Eye, Globe } from "lucide-react";
+import { useLang } from "@/context/lang-context";
 
 const plans = [
   {
@@ -85,6 +86,7 @@ function PhoneMockup() {
 
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const { lang, setLang } = useLang();
 
   const faqs = [
     { q: "هل أحتاج لتطبيق لاستخدام المنيو؟", a: "لا، يفتح المنيو مباشرة في متصفح الهاتف فور مسح كود QR، دون الحاجة لتحميل أي تطبيق." },
@@ -103,11 +105,20 @@ export default function LandingPage() {
 
         {/* Top bar */}
         <div className="flex items-center justify-between px-6 pt-6">
-          <Link href="/login">
-            <button className="text-white/90 font-semibold text-sm hover:text-white transition-colors">
-              تسجيل الدخول
+          <div className="flex items-center gap-3">
+            <Link href="/login">
+              <button className="text-white/90 font-semibold text-sm hover:text-white transition-colors">
+                تسجيل الدخول
+              </button>
+            </Link>
+            <button
+              onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+              className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              {lang === "ar" ? "EN" : "عر"}
             </button>
-          </Link>
+          </div>
           <img src="/menuclick-logo-black-nobg.png" alt="MenuClick" className="h-16 w-auto object-contain" />
         </div>
 
