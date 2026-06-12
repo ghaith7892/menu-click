@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 import {
   UtensilsCrossed, QrCode,
   Trash2, LogOut,
@@ -581,34 +582,49 @@ export default function DashboardPage() {
                 <h3 className="font-bold text-gray-900 mb-1">{t.restaurantQr}</h3>
                 <p className="text-sm text-gray-400 mb-5">{t.restaurantQrDesc}</p>
 
-                <div className="flex items-center justify-center py-10 bg-gray-50 rounded-3xl mb-5">
-                  <div className="bg-white p-6 rounded-3xl shadow-md text-center">
-                    <QrCode className="w-36 h-36 text-gray-900 mx-auto" />
-                    <p className="mt-4 text-sm font-bold text-gray-900">{restaurant?.name ?? "—"}</p>
-                    <p className="text-xs text-gray-400 mt-1">{t.scanToView}</p>
-                  </div>
-                </div>
+                {restaurant && (() => {
+                  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                  const menuUrl = `${window.location.origin}${base}/menu/${restaurant.id}`;
+                  return (
+                    <>
+                      <div className="flex items-center justify-center py-10 bg-gray-50 rounded-3xl mb-5">
+                        <div className="bg-white p-6 rounded-3xl shadow-md text-center">
+                          <QRCodeCanvas value={menuUrl} size={144} includeMargin={false} />
+                          <p className="mt-4 text-sm font-bold text-gray-900">{restaurant.name}</p>
+                          <p className="text-xs text-gray-400 mt-1">{t.scanToView}</p>
+                        </div>
+                      </div>
 
-                <div className="bg-gray-50 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={primaryStyle}>
-                    <Link2 className="w-4 h-4 text-white" />
-                  </div>
-                  <p className="text-xs text-gray-500 flex-1 truncate" dir="ltr">
-                    {typeof window !== "undefined" ? window.location.origin : ""}/menu/{restaurant?.id ?? "…"}
-                  </p>
-                </div>
+                      <div className="bg-gray-50 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={primaryStyle}>
+                          <Link2 className="w-4 h-4 text-white" />
+                        </div>
+                        <p className="text-xs text-gray-500 flex-1 truncate" dir="ltr">{menuUrl}</p>
+                      </div>
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { const url = `${window.location.origin}/menu/${restaurant?.id}`; navigator.clipboard.writeText(url); }}
-                    className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors">
-                    <Link2 className="w-4 h-4" /> {t.copyLink}
-                  </button>
-                  <button className="flex-1 flex items-center justify-center gap-2 text-white font-bold py-4 rounded-2xl text-sm hover:brightness-110 transition-all"
-                    style={primaryStyle}>
-                    <QrCode className="w-4 h-4" /> {t.downloadQr}
-                  </button>
-                </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => navigator.clipboard.writeText(menuUrl)}
+                          className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-2xl text-sm hover:bg-gray-800 transition-colors">
+                          <Link2 className="w-4 h-4" /> {t.copyLink}
+                        </button>
+                        <button
+                          onClick={() => {
+                            const canvas = document.querySelector("canvas") as HTMLCanvasElement | null;
+                            if (!canvas) return;
+                            const link = document.createElement("a");
+                            link.download = `${restaurant.name}-qr.png`;
+                            link.href = canvas.toDataURL();
+                            link.click();
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 text-white font-bold py-4 rounded-2xl text-sm hover:brightness-110 transition-all"
+                          style={primaryStyle}>
+                          <QrCode className="w-4 h-4" /> {t.downloadQr}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
