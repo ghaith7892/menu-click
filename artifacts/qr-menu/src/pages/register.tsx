@@ -88,9 +88,17 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <div className="max-w-2xl mx-auto px-4 py-12">
-        {/* Logo */}
-        <div className="flex items-center justify-center mb-10">
-          <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-12 w-auto object-contain rounded-xl" />
+        {/* Top bar */}
+        <div className="flex items-center justify-between mb-10">
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+            رجوع
+          </button>
+          <img src="/menuclick-logo.jpg" alt="MenuClick" className="h-10 w-auto object-contain rounded-xl" />
+          <div className="w-16" />
         </div>
 
         {/* Step indicator */}
