@@ -146,7 +146,7 @@ export default function LandingPage() {
             {/* Main CTA */}
             <Link href="/register" className="block">
               <button className="w-full bg-white text-gray-900 font-bold py-3.5 rounded-2xl text-sm hover:bg-gray-50 transition-colors shadow-xl">
-                أنشئ منيو مجاناً
+                إنشاء حساب
               </button>
             </Link>
 
@@ -288,7 +288,7 @@ export default function LandingPage() {
           <Link href="/register">
             <button className="w-full text-white font-bold py-4 rounded-2xl text-base shadow-xl hover:brightness-110 transition-all"
               style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}>
-              أنشئ منيو مجاناً
+              إنشاء حساب
             </button>
           </Link>
         </div>
