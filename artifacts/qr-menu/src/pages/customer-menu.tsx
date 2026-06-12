@@ -64,10 +64,11 @@ export default function CustomerMenuPage() {
         <div className="absolute inset-0 bg-black/40" />
         <div className="relative px-4 pt-10 pb-8 text-center">
           <button
-            onClick={() => { if (window.history.length > 1) window.history.back(); else navigate("/dashboard"); }}
-            className="absolute top-4 right-4 w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
+            onClick={() => navigate("/dashboard")}
+            className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/25 backdrop-blur-md text-white text-sm font-bold px-3 py-2 rounded-2xl hover:bg-white/40 transition-colors shadow-sm"
           >
-            <ChevronRight className="w-5 h-5 text-white" />
+            <ChevronRight className="w-4 h-4" />
+            رجوع
           </button>
 
           <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl mx-auto mb-3 shadow-xl">
