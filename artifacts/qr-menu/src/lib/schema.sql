@@ -19,6 +19,15 @@ create policy "Users can update own data" on public.users
 create policy "Service can insert users" on public.users
   for insert with check (auth.uid() = id);
 
+-- Admin can read all users
+create policy "Admins can read all users" on public.users
+  for select using (
+    exists (
+      select 1 from public.users u
+      where u.id = auth.uid() and u.role = 'admin'
+    )
+  );
+
 -- 2. RESTAURANTS TABLE
 create table if not exists public.restaurants (
   id uuid primary key default gen_random_uuid(),
@@ -38,6 +47,15 @@ create policy "Owners can manage own restaurants" on public.restaurants
   for all using (auth.uid() = owner_id);
 create policy "Anyone can read active restaurants" on public.restaurants
   for select using (is_active = true);
+
+-- Admin can read AND manage ALL restaurants (including inactive)
+create policy "Admins can manage all restaurants" on public.restaurants
+  for all using (
+    exists (
+      select 1 from public.users u
+      where u.id = auth.uid() and u.role = 'admin'
+    )
+  );
 
 -- 3. CATEGORIES TABLE
 create table if not exists public.categories (
@@ -109,8 +127,33 @@ create policy "Anyone can insert orders" on public.orders
   for insert with check (true);
 
 -- =============================================
+-- DB Trigger: auto-create user profile on signup
+-- =============================================
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer as $$
+begin
+  insert into public.users (id, name, email, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    new.email,
+    coalesce(new.raw_user_meta_data->>'role', 'restaurant')
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+create or replace trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- =============================================
 -- Enable Realtime for live order updates
 -- =============================================
 alter publication supabase_realtime add table public.orders;
 
--- Done!
+-- =============================================
+-- To create a Super Admin user, run:
+-- update public.users set role = 'admin' where email = 'your@email.com';
+-- =============================================

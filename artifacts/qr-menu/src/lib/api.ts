@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { CategoryRow, MenuItemExtra, MenuItemRow, RestaurantRow } from "./database.types";
+import type { CategoryRow, MenuItemExtra, MenuItemRow, RestaurantRow, UserRow } from "./database.types";
 
 // ─── Restaurant ─────────────────────────────────────────────
 export async function getRestaurantByOwner(ownerId: string): Promise<RestaurantRow | null> {
@@ -105,8 +105,44 @@ export async function getAllRestaurants(): Promise<RestaurantRow[]> {
   return (data as RestaurantRow[]) ?? [];
 }
 
+export async function getAllUsers(): Promise<UserRow[]> {
+  const { data } = await supabase
+    .from("users")
+    .select("*")
+    .order("created_at", { ascending: false });
+  return (data as UserRow[]) ?? [];
+}
+
 export async function updateRestaurantPlan(id: string, plan: RestaurantRow["plan"]) {
-  return supabase.from("restaurants").update({ plan } as Record<string, unknown>).eq("id", id);
+  const { data, error } = await supabase
+    .from("restaurants")
+    .update({ plan } as Record<string, unknown>)
+    .eq("id", id)
+    .select()
+    .single();
+  return { data: data as RestaurantRow | null, error };
+}
+
+export async function updateRestaurantActive(id: string, isActive: boolean) {
+  const { data, error } = await supabase
+    .from("restaurants")
+    .update({ is_active: isActive } as Record<string, unknown>)
+    .eq("id", id)
+    .select()
+    .single();
+  return { data: data as RestaurantRow | null, error };
+}
+
+export async function deleteRestaurant(id: string) {
+  return supabase.from("restaurants").delete().eq("id", id);
+}
+
+export async function getRestaurantItemCount(restaurantId: string): Promise<number> {
+  const { count } = await supabase
+    .from("menu_items")
+    .select("*", { count: "exact", head: true })
+    .eq("restaurant_id", restaurantId);
+  return count ?? 0;
 }
 
 export type { MenuItemExtra };
