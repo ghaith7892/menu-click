@@ -7,133 +7,42 @@ import { useLang } from "@/context/lang-context";
 
 function SlideQR() {
   return (
-    <div className="relative flex items-center justify-center" style={{ height: 320 }}>
-      {/* Floating QR card behind */}
-      <div className="absolute right-[52%] top-1/2 -translate-y-1/3 bg-white rounded-2xl p-3 shadow-xl z-10 rotate-6">
-        <div className="w-14 h-14 grid grid-cols-3 gap-0.5">
-          {Array.from({ length: 9 }).map((_, i) => (
-            <div key={i} className={`rounded-sm ${[0,1,3,4,5,7,8].includes(i) ? "bg-gray-900" : "bg-white"}`} />
-          ))}
-        </div>
-      </div>
-
-      {/* Main phone */}
-      <div className="relative z-20" style={{ perspective: 800 }}>
-        <div className="rounded-[40px] shadow-2xl" style={{
-          background: "linear-gradient(145deg, #5b6ef0, #4855e8)",
-          padding: "10px",
-          width: 200,
-          transform: "rotateY(-8deg) rotateX(4deg)",
-        }}>
-          {/* Notch */}
-          <div className="w-12 h-4 bg-black/80 rounded-full mx-auto mb-2" />
-          {/* Screen */}
-          <div className="bg-gray-50 rounded-[30px] overflow-hidden" style={{ minHeight: 240, padding: "16px 12px" }}>
-            <p className="text-center text-sm font-black text-gray-900 mb-3">Scan QR</p>
-            {/* QR scanner UI */}
-            <div className="rounded-2xl mx-auto flex items-center justify-center" style={{ background: "linear-gradient(135deg, #5b6ef0, #4855e8)", width: 120, height: 120 }}>
-              <div className="bg-white rounded-xl p-2.5">
-                {/* Simulated QR */}
-                <div className="grid gap-px" style={{ gridTemplateColumns: "repeat(7,1fr)", width: 56, height: 56 }}>
-                  {[1,1,1,0,1,1,1, 1,0,1,0,1,0,1, 1,1,1,0,0,0,0, 0,0,0,1,0,1,0, 0,1,0,0,1,1,1, 1,0,1,0,1,0,1, 1,1,1,0,1,0,0].map((v, i) => (
-                    <div key={i} className={`rounded-sm ${v ? "bg-gray-900" : "bg-white"}`} />
-                  ))}
-                </div>
-              </div>
-            </div>
-            {/* Corner brackets */}
-            <div className="flex justify-between mt-3 px-2">
-              <div className="w-5 h-5 border-l-2 border-t-2 border-indigo-400 rounded-tl" />
-              <div className="w-5 h-5 border-r-2 border-t-2 border-indigo-400 rounded-tr" />
-            </div>
-            <div className="flex justify-between px-2 -mt-1">
-              <div className="w-5 h-5 border-l-2 border-b-2 border-indigo-400 rounded-bl" />
-              <div className="w-5 h-5 border-r-2 border-b-2 border-indigo-400 rounded-br" />
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="flex items-center justify-center" style={{ height: 340 }}>
+      <img
+        src={`${import.meta.env.BASE_URL}slide-qr.png`}
+        alt="Scan QR"
+        className="h-full w-auto object-contain drop-shadow-2xl"
+        style={{ maxWidth: "90%" }}
+      />
     </div>
   );
 }
 
 function SlideMenu() {
   return (
-    <div className="relative flex items-center justify-center" style={{ height: 320 }}>
-      <div className="relative z-20" style={{ perspective: 800 }}>
-        <div className="rounded-[40px] shadow-2xl" style={{
-          background: "linear-gradient(145deg, #5b6ef0, #4855e8)",
-          padding: "10px",
-          width: 200,
-          transform: "rotateY(-8deg) rotateX(4deg)",
-        }}>
-          <div className="w-12 h-4 bg-black/80 rounded-full mx-auto mb-2" />
-          <div className="bg-gray-50 rounded-[30px] overflow-hidden px-3 py-4" style={{ minHeight: 250 }}>
-            <p className="text-center text-sm font-black text-gray-900 mb-3">Menu</p>
-            {/* Pizza item */}
-            <div className="bg-white rounded-2xl mb-2 flex items-center justify-between px-3 py-2 shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-xl">🍕</div>
-                <p className="text-xs font-bold text-gray-900">Pizza</p>
-              </div>
-              <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: "linear-gradient(135deg, #5b6ef0, #4855e8)" }}>+</div>
-            </div>
-            {/* Drink item */}
-            <div className="bg-white rounded-2xl flex items-center justify-between px-3 py-2 shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-xl">🥤</div>
-                <p className="text-xs font-bold text-gray-900">Drink</p>
-              </div>
-              <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: "linear-gradient(135deg, #5b6ef0, #4855e8)" }}>+</div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="flex items-center justify-center" style={{ height: 340 }}>
+      <img
+        src={`${import.meta.env.BASE_URL}slide-menu.png`}
+        alt="Menu"
+        className="h-full w-auto object-contain drop-shadow-2xl"
+        style={{ maxWidth: "90%" }}
+      />
     </div>
   );
 }
 
 function SlidePreview() {
-  const items = [
-    { emoji: "🍟", name: "Snack box", price: "from 8 SR" },
-    { emoji: "🥗", name: "Summer salad", price: "9 SR" },
-    { emoji: "🧆", name: "Falafel salad", price: "11 SR" },
-    { emoji: "🥙", name: "Doner salad", price: "from 12.5 SR" },
-  ];
   return (
-    <div className="flex flex-col items-center gap-4" style={{ height: 320 }}>
-      {/* Phone */}
-      <div className="rounded-[36px] shadow-2xl" style={{ background: "#1a1a2e", padding: "8px", width: 195 }}>
-        <div className="w-10 h-3.5 bg-black rounded-full mx-auto mb-1.5" />
-        <div className="bg-white rounded-[28px] overflow-hidden" style={{ minHeight: 220 }}>
-          {/* Tabs */}
-          <div className="flex gap-1.5 px-2 pt-2 pb-1 overflow-hidden">
-            {["doners","snacks","sauces","drinks"].map((c,i)=>(
-              <button key={c} className={`text-[8px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${i===1?"text-white":"text-gray-400"}`}
-                style={i===1 ? { background: "linear-gradient(135deg,#7c3aed,#6366f1)" } : {}}>
-                {c}
-              </button>
-            ))}
-          </div>
-          {/* Grid */}
-          <div className="grid grid-cols-2 gap-1.5 px-2 pb-2">
-            {items.map((item,i)=>(
-              <div key={i} className="bg-gray-50 rounded-xl overflow-hidden">
-                <div className="h-12 bg-gray-100 flex items-center justify-center text-2xl">{item.emoji}</div>
-                <div className="p-1">
-                  <p className="text-[8px] font-bold text-gray-900">{item.price}</p>
-                  <p className="text-[7px] text-gray-500">{item.name}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-gray-100 text-center pb-1">
-            <p className="text-[7px] text-gray-300">menuclick.app</p>
-          </div>
-        </div>
+    <div className="flex flex-col items-center gap-4">
+      <div className="flex items-center justify-center" style={{ height: 280 }}>
+        <img
+          src={`${import.meta.env.BASE_URL}slide-preview.png`}
+          alt="Menu Preview"
+          className="h-full w-auto object-contain drop-shadow-2xl"
+          style={{ maxWidth: "90%" }}
+        />
       </div>
-      {/* Demo / AR buttons */}
-      <div className="flex gap-2 w-full max-w-[220px]">
+      <div className="flex gap-2 w-full max-w-[240px]">
         <Link href="/menu/demo" className="flex-1">
           <button className="w-full bg-gray-900 text-white font-bold py-2.5 rounded-2xl text-xs hover:bg-gray-800 transition-colors">
             Demo menu
