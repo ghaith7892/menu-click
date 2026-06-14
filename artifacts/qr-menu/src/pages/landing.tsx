@@ -1,8 +1,264 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { QrCode, Check, Star, ChevronDown, Eye, Globe } from "lucide-react";
+import { QrCode, Check, Star, ChevronDown, Eye, Globe, QrCode as QrIcon } from "lucide-react";
 import { useLang } from "@/context/lang-context";
 
+/* ─── Phone Slide Illustrations ──────────────────────────── */
+
+function SlideQR() {
+  return (
+    <div className="relative flex items-center justify-center" style={{ height: 320 }}>
+      {/* Floating QR card behind */}
+      <div className="absolute right-[52%] top-1/2 -translate-y-1/3 bg-white rounded-2xl p-3 shadow-xl z-10 rotate-6">
+        <div className="w-14 h-14 grid grid-cols-3 gap-0.5">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className={`rounded-sm ${[0,1,3,4,5,7,8].includes(i) ? "bg-gray-900" : "bg-white"}`} />
+          ))}
+        </div>
+      </div>
+
+      {/* Main phone */}
+      <div className="relative z-20" style={{ perspective: 800 }}>
+        <div className="rounded-[40px] shadow-2xl" style={{
+          background: "linear-gradient(145deg, #5b6ef0, #4855e8)",
+          padding: "10px",
+          width: 200,
+          transform: "rotateY(-8deg) rotateX(4deg)",
+        }}>
+          {/* Notch */}
+          <div className="w-12 h-4 bg-black/80 rounded-full mx-auto mb-2" />
+          {/* Screen */}
+          <div className="bg-gray-50 rounded-[30px] overflow-hidden" style={{ minHeight: 240, padding: "16px 12px" }}>
+            <p className="text-center text-sm font-black text-gray-900 mb-3">Scan QR</p>
+            {/* QR scanner UI */}
+            <div className="rounded-2xl mx-auto flex items-center justify-center" style={{ background: "linear-gradient(135deg, #5b6ef0, #4855e8)", width: 120, height: 120 }}>
+              <div className="bg-white rounded-xl p-2.5">
+                {/* Simulated QR */}
+                <div className="grid gap-px" style={{ gridTemplateColumns: "repeat(7,1fr)", width: 56, height: 56 }}>
+                  {[1,1,1,0,1,1,1, 1,0,1,0,1,0,1, 1,1,1,0,0,0,0, 0,0,0,1,0,1,0, 0,1,0,0,1,1,1, 1,0,1,0,1,0,1, 1,1,1,0,1,0,0].map((v, i) => (
+                    <div key={i} className={`rounded-sm ${v ? "bg-gray-900" : "bg-white"}`} />
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Corner brackets */}
+            <div className="flex justify-between mt-3 px-2">
+              <div className="w-5 h-5 border-l-2 border-t-2 border-indigo-400 rounded-tl" />
+              <div className="w-5 h-5 border-r-2 border-t-2 border-indigo-400 rounded-tr" />
+            </div>
+            <div className="flex justify-between px-2 -mt-1">
+              <div className="w-5 h-5 border-l-2 border-b-2 border-indigo-400 rounded-bl" />
+              <div className="w-5 h-5 border-r-2 border-b-2 border-indigo-400 rounded-br" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SlideMenu() {
+  return (
+    <div className="relative flex items-center justify-center" style={{ height: 320 }}>
+      <div className="relative z-20" style={{ perspective: 800 }}>
+        <div className="rounded-[40px] shadow-2xl" style={{
+          background: "linear-gradient(145deg, #5b6ef0, #4855e8)",
+          padding: "10px",
+          width: 200,
+          transform: "rotateY(-8deg) rotateX(4deg)",
+        }}>
+          <div className="w-12 h-4 bg-black/80 rounded-full mx-auto mb-2" />
+          <div className="bg-gray-50 rounded-[30px] overflow-hidden px-3 py-4" style={{ minHeight: 250 }}>
+            <p className="text-center text-sm font-black text-gray-900 mb-3">Menu</p>
+            {/* Pizza item */}
+            <div className="bg-white rounded-2xl mb-2 flex items-center justify-between px-3 py-2 shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-xl">🍕</div>
+                <p className="text-xs font-bold text-gray-900">Pizza</p>
+              </div>
+              <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: "linear-gradient(135deg, #5b6ef0, #4855e8)" }}>+</div>
+            </div>
+            {/* Drink item */}
+            <div className="bg-white rounded-2xl flex items-center justify-between px-3 py-2 shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-xl">🥤</div>
+                <p className="text-xs font-bold text-gray-900">Drink</p>
+              </div>
+              <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: "linear-gradient(135deg, #5b6ef0, #4855e8)" }}>+</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SlidePreview() {
+  const items = [
+    { emoji: "🍟", name: "Snack box", price: "from 8 SR" },
+    { emoji: "🥗", name: "Summer salad", price: "9 SR" },
+    { emoji: "🧆", name: "Falafel salad", price: "11 SR" },
+    { emoji: "🥙", name: "Doner salad", price: "from 12.5 SR" },
+  ];
+  return (
+    <div className="flex flex-col items-center gap-4" style={{ height: 320 }}>
+      {/* Phone */}
+      <div className="rounded-[36px] shadow-2xl" style={{ background: "#1a1a2e", padding: "8px", width: 195 }}>
+        <div className="w-10 h-3.5 bg-black rounded-full mx-auto mb-1.5" />
+        <div className="bg-white rounded-[28px] overflow-hidden" style={{ minHeight: 220 }}>
+          {/* Tabs */}
+          <div className="flex gap-1.5 px-2 pt-2 pb-1 overflow-hidden">
+            {["doners","snacks","sauces","drinks"].map((c,i)=>(
+              <button key={c} className={`text-[8px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${i===1?"text-white":"text-gray-400"}`}
+                style={i===1 ? { background: "linear-gradient(135deg,#7c3aed,#6366f1)" } : {}}>
+                {c}
+              </button>
+            ))}
+          </div>
+          {/* Grid */}
+          <div className="grid grid-cols-2 gap-1.5 px-2 pb-2">
+            {items.map((item,i)=>(
+              <div key={i} className="bg-gray-50 rounded-xl overflow-hidden">
+                <div className="h-12 bg-gray-100 flex items-center justify-center text-2xl">{item.emoji}</div>
+                <div className="p-1">
+                  <p className="text-[8px] font-bold text-gray-900">{item.price}</p>
+                  <p className="text-[7px] text-gray-500">{item.name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-gray-100 text-center pb-1">
+            <p className="text-[7px] text-gray-300">menuclick.app</p>
+          </div>
+        </div>
+      </div>
+      {/* Demo / AR buttons */}
+      <div className="flex gap-2 w-full max-w-[220px]">
+        <Link href="/menu/demo" className="flex-1">
+          <button className="w-full bg-gray-900 text-white font-bold py-2.5 rounded-2xl text-xs hover:bg-gray-800 transition-colors">
+            Demo menu
+          </button>
+        </Link>
+        <Link href="/register" className="flex-1">
+          <button className="w-full text-white font-bold py-2.5 rounded-2xl text-xs flex items-center justify-center gap-1"
+            style={{ background: "linear-gradient(135deg,#7c3aed,#6366f1)" }}>
+            <span className="text-sm">✦</span> AR preview
+          </button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Slide data ─────────────────────────────────────────── */
+const SLIDES = [
+  {
+    title: "Create a free menu",
+    illustration: <SlideQR />,
+    ctaLabel: "Continue",
+  },
+  {
+    title: "Create a free menu",
+    illustration: <SlideMenu />,
+    ctaLabel: "Continue",
+  },
+  {
+    title: "It's free",
+    illustration: <SlidePreview />,
+    ctaLabel: "Create menu",
+  },
+];
+
+/* ─── Carousel Hero ──────────────────────────────────────── */
+function CarouselHero() {
+  const [current, setCurrent] = useState(0);
+  const { lang, setLang } = useLang();
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrent(prev => (prev + 1) % SLIDES.length);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const slide = SLIDES[current];
+
+  return (
+    <section
+      className="relative flex flex-col overflow-hidden"
+      style={{
+        minHeight: "100svh",
+        background: "linear-gradient(160deg, #7c3aed 0%, #6366f1 50%, #4f46e5 100%)",
+      }}
+    >
+      {/* ── Top bar ── */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-2 z-10">
+        <Link href="/login">
+          <button className="text-white font-bold text-sm hover:text-white/80 transition-colors">
+            Log in
+          </button>
+        </Link>
+        <Link href="/register">
+          <button className="text-white font-bold text-sm hover:text-white/80 transition-colors">
+            Skip
+          </button>
+        </Link>
+      </div>
+
+      {/* ── Slides area ── */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4 relative">
+        {SLIDES.map((s, i) => (
+          <div
+            key={i}
+            className="absolute inset-0 flex flex-col items-center justify-center px-6 transition-all duration-500"
+            style={{
+              opacity: i === current ? 1 : 0,
+              transform: i === current ? "translateX(0)" : i < current ? "translateX(8%)" : "translateX(-8%)",
+              pointerEvents: i === current ? "auto" : "none",
+            }}
+          >
+            {/* Title */}
+            <h1 className="text-3xl font-black text-white text-center mb-6 leading-tight">
+              {s.title}
+            </h1>
+
+            {/* Illustration */}
+            <div className="w-full max-w-xs flex items-center justify-center">
+              {s.illustration}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Pagination dots ── */}
+      <div className="flex justify-center items-center gap-2 pb-5 z-10">
+        {SLIDES.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setCurrent(i)}
+            className="rounded-full transition-all duration-400"
+            style={{
+              width: i === current ? 28 : 8,
+              height: 6,
+              background: i === current ? "white" : "rgba(255,255,255,0.35)",
+            }}
+          />
+        ))}
+      </div>
+
+      {/* ── Bottom Continue button ── */}
+      <div className="px-6 pb-8 z-10">
+        <Link href="/register">
+          <button className="w-full bg-white text-gray-900 font-black py-4 rounded-3xl text-base shadow-xl hover:bg-gray-50 transition-colors">
+            {slide.ctaLabel}
+          </button>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Plans ──────────────────────────────────────────────── */
 const plans = [
   {
     name: "مجاني",
@@ -33,60 +289,9 @@ const testimonials = [
   { name: "خالد العمري", role: "صاحب سلسلة مطاعم", stars: 5, text: "أتمكن من إدارة منيو جميع فروعي من مكان واحد. وفّر عليّ الكثير من الوقت والتكلفة." },
 ];
 
-/* ---- Phone mockup component ---- */
-function PhoneMockup() {
-  const demoItems = [
-    { emoji: "🍟", name: "Snack box", price: "from 8 SR", weight: "200g" },
-    { emoji: "🥗", name: "Summer salad", price: "9 SR", weight: "250g" },
-    { emoji: "🧆", name: "Falafel salad", price: "11 SR", weight: "200g" },
-    { emoji: "🥙", name: "Doner salad", price: "from 12.5 SR", weight: "200g" },
-  ];
-  return (
-    <div className="relative mx-auto" style={{ width: 220 }}>
-      {/* Phone shell */}
-      <div className="bg-gray-900 rounded-[36px] p-[10px] shadow-2xl">
-        <div className="bg-white rounded-[28px] overflow-hidden" style={{ minHeight: 400 }}>
-          {/* Status bar */}
-          <div className="flex items-center justify-between px-4 pt-3 pb-1">
-            <span className="text-[10px] font-bold text-gray-900">15:24</span>
-            <div className="w-12 h-3 bg-gray-900 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-3" style={{ width: 48, height: 12 }} />
-            <div className="flex gap-1 items-center">
-              <div className="flex gap-0.5">{[2,3,4].map(h=><div key={h} className="bg-gray-900 rounded-sm" style={{width:2,height:h}}/>)}</div>
-              <div className="text-[8px]">●</div>
-            </div>
-          </div>
-          {/* Category tabs */}
-          <div className="flex gap-2 px-3 py-2 overflow-hidden">
-            {["doners","snacks","sauces","drinks"].map((c,i)=>(
-              <button key={c} className={`text-[9px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${i===1?"bg-indigo-600 text-white":"text-gray-500"}`}>{c}</button>
-            ))}
-          </div>
-          {/* Items grid */}
-          <div className="grid grid-cols-2 gap-2 px-3 pb-3">
-            {demoItems.map((item,i)=>(
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-                <div className="h-16 bg-gray-100 flex items-center justify-center text-2xl">{item.emoji}</div>
-                <div className="p-1.5">
-                  <p className="text-[9px] font-bold text-gray-900 leading-tight">{item.price}</p>
-                  <p className="text-[8px] text-gray-500 leading-tight">{item.name}</p>
-                  <p className="text-[7px] text-gray-400 mt-0.5">{item.weight}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          {/* Bottom bar */}
-          <div className="border-t border-gray-100 px-3 py-2 text-center">
-            <p className="text-[8px] text-gray-400">menusa.app</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/* ─── Main Landing Page ──────────────────────────────────── */
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const { lang, setLang } = useLang();
 
   const faqs = [
     { q: "هل أحتاج لتطبيق لاستخدام المنيو؟", a: "لا، يفتح المنيو مباشرة في متصفح الهاتف فور مسح كود QR، دون الحاجة لتحميل أي تطبيق." },
@@ -99,81 +304,8 @@ export default function LandingPage() {
     <div className="min-h-screen text-foreground font-sans" dir="rtl">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); .font-sans { font-family: 'Cairo', sans-serif; }`}</style>
 
-      {/* ===== HERO — gradient full screen ===== */}
-      <section className="relative min-h-screen flex flex-col overflow-hidden"
-        style={{ background: "linear-gradient(160deg, #7c3aed 0%, #6366f1 50%, #4f46e5 100%)" }}>
-
-        {/* Top bar */}
-        <div className="flex items-center justify-between px-6 pt-6">
-          <div className="flex items-center gap-3">
-            <Link href="/login">
-              <button className="text-white/90 font-semibold text-sm hover:text-white transition-colors">
-                تسجيل الدخول
-              </button>
-            </Link>
-            <button
-              onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-              className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              {lang === "ar" ? "EN" : "عر"}
-            </button>
-          </div>
-          <img src="/menuclick-logo-black-nobg.png" alt="MenuClick" className="h-16 w-auto object-contain" />
-        </div>
-
-        {/* Headline */}
-        <div className="text-center pt-10 pb-6 px-6">
-          <h1 className="text-4xl font-black text-white leading-tight">
-            منيو رقمي احترافي لمطعمك
-          </h1>
-          <p className="text-white/70 text-sm mt-2">بدون تطبيق — يفتح مباشرة من الهاتف</p>
-        </div>
-
-        {/* Phone + Buttons side by side */}
-        <div className="flex flex-1 items-center justify-center gap-8 px-6 pb-10 flex-wrap">
-
-          {/* CTA Buttons — stacked vertically beside phone */}
-          <div className="flex flex-col gap-3 w-56">
-            {/* Demo preview */}
-            <Link href="/menu/demo" className="block">
-              <button className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-2xl text-sm hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 shadow-lg">
-                <Eye className="w-4 h-4" />
-                معاينة تجريبية
-              </button>
-            </Link>
-
-            {/* QR preview */}
-            <Link href="/login" className="block">
-              <button className="w-full text-white font-bold py-3.5 rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
-                style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}>
-                تسجيل الدخول
-              </button>
-            </Link>
-
-            {/* Main CTA */}
-            <Link href="/register" className="block">
-              <button className="w-full bg-white text-gray-900 font-bold py-3.5 rounded-2xl text-sm hover:bg-gray-50 transition-colors shadow-xl">
-                إنشاء حساب
-              </button>
-            </Link>
-
-            {/* Slide dots */}
-            <div className="flex justify-center gap-1.5 pt-1">
-              {[0,1,2,3].map(i=>(
-                <div key={i} className={`rounded-full transition-all ${i===3?"bg-white w-5 h-1.5":"bg-white/40 w-1.5 h-1.5"}`} />
-              ))}
-            </div>
-
-            <p className="text-center text-white/50 text-xs">لا يلزم بطاقة ائتمان</p>
-          </div>
-
-          {/* Phone mockup */}
-          <div className="flex-shrink-0">
-            <PhoneMockup />
-          </div>
-        </div>
-      </section>
+      {/* ===== CAROUSEL HERO ===== */}
+      <CarouselHero />
 
       {/* ===== HOW IT WORKS ===== */}
       <section className="py-20 px-4 bg-white">
@@ -184,7 +316,7 @@ export default function LandingPage() {
             {[
               { step: "1", title: "أنشئ منيو", desc: "أضف أقسامك وأصنافك وصورك وأسعارك من لوحة التحكم السهلة." },
               { step: "2", title: "ولّد QR Code", desc: "احصل على كود QR لمطعمك كاملاً أو لكل طاولة على حدة." },
-              { step: "3", title: "استقبل الطلبات", desc: "يمسح الزبون الكود ويطلب مباشرة، وتصلك الطلبات فورياً." },
+              { step: "3", title: "ابدأ الآن", desc: "يمسح الزبون الكود ويرى المنيو مباشرة بدون تطبيق." },
             ].map((s, i) => (
               <div key={i} className="flex flex-col items-center">
                 <div className="w-14 h-14 rounded-3xl text-white text-xl font-black flex items-center justify-center mb-5 shadow-lg"
@@ -292,11 +424,11 @@ export default function LandingPage() {
       <section className="py-20 px-4 bg-white">
         <div className="max-w-md mx-auto text-center">
           <h2 className="text-3xl font-black text-gray-900 mb-3">جاهز لتحديث مطعمك؟</h2>
-          <p className="text-gray-500 text-sm mb-8">انضم إلى آلاف المطاعم التي تثق بمنيو باركود</p>
+          <p className="text-gray-500 text-sm mb-8">انضم إلى آلاف المطاعم التي تثق بمنيو كليك</p>
           <Link href="/register">
             <button className="w-full text-white font-bold py-4 rounded-2xl text-base shadow-xl hover:brightness-110 transition-all"
               style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}>
-              إنشاء حساب
+              إنشاء حساب مجاناً
             </button>
           </Link>
         </div>
@@ -310,9 +442,9 @@ export default function LandingPage() {
               style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}>
               <QrCode className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-gray-900">منيو باركود</span>
+            <span className="font-bold text-gray-900">MenuClick</span>
           </div>
-          <p>© 2025 منيو باركود. جميع الحقوق محفوظة.</p>
+          <p>© 2025 MenuClick. جميع الحقوق محفوظة.</p>
           <div className="flex gap-4">
             <a href="#" className="hover:text-gray-900 transition-colors">سياسة الخصوصية</a>
             <a href="#" className="hover:text-gray-900 transition-colors">الشروط والأحكام</a>
