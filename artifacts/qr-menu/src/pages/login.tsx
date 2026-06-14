@@ -74,7 +74,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Back button */}
           <button
-            onClick={() => window.history.back()}
+            onClick={() => navigate("/")}
             className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors mb-8 group"
           >
             <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
