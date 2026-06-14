@@ -701,8 +701,11 @@ export default function DashboardPage() {
               {restaurant?.cover_color?.startsWith("data:") ? (
                 <img src={restaurant.cover_color} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full"
-                  style={{ background: restaurant?.cover_color ?? "linear-gradient(135deg, #e0e7ff, #c7d2fe)" }} />
+                <img
+                  src={`${import.meta.env.BASE_URL}default-cover.jpg`}
+                  className="w-full h-full object-cover"
+                  alt="غلاف المطعم"
+                />
               )}
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-2xl px-4 py-2 flex items-center gap-2 text-sm font-semibold text-gray-800">
