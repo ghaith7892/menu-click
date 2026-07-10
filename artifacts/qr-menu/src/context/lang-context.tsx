@@ -83,6 +83,9 @@ const translations = {
     restaurantInfo: "بيانات المطعم",
     restaurantInfoDesc: "تعديل اسم المطعم والشعار والألوان",
     editInfo: "تعديل البيانات",
+    currencySection: "العملة",
+    currencyDesc: "اختر عملة عرض الأسعار في المنيو",
+    currencyUpdated: "✓ تم تحديث العملة",
   },
   en: {
     // Sidebar
@@ -164,6 +167,9 @@ const translations = {
     restaurantInfo: "Restaurant Info",
     restaurantInfoDesc: "Edit restaurant name, logo and colors",
     editInfo: "Edit Info",
+    currencySection: "Currency",
+    currencyDesc: "Choose the currency shown for menu prices",
+    currencyUpdated: "✓ Currency updated",
   },
 } as const;
 

@@ -3,6 +3,7 @@ import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
 import { getRestaurantById, getCategories, getMenuItems } from "@/lib/api";
+import { getCurrencySymbol } from "@/lib/currencies";
 
 export default function CustomerMenuPage() {
   const params = useParams<{ restaurantId: string }>();
@@ -51,6 +52,7 @@ export default function CustomerMenuPage() {
   const coverBg = restaurant?.cover_color?.startsWith("data:")
     ? undefined
     : (restaurant?.cover_color ?? "#7c3aed");
+  const currencySymbol = getCurrencySymbol(restaurant?.currency);
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
@@ -159,7 +161,7 @@ export default function CustomerMenuPage() {
                 {item.description && (
                   <p className="text-xs text-gray-400 line-clamp-2 mb-2">{item.description}</p>
                 )}
-                <span className="font-black text-indigo-600 text-base">{item.price} ر.س</span>
+                <span className="font-black text-indigo-600 text-base">{item.price} {currencySymbol}</span>
               </div>
             </button>
           ))
@@ -195,7 +197,7 @@ export default function CustomerMenuPage() {
                   {selectedItem.name}
                   {selectedItem.is_popular && <span className="text-sm mr-2">🔥</span>}
                 </h2>
-                <span className="font-black text-2xl text-indigo-600 shrink-0">{selectedItem.price} ر.س</span>
+                <span className="font-black text-2xl text-indigo-600 shrink-0">{selectedItem.price} {currencySymbol}</span>
               </div>
 
               {selectedItem.description && (
@@ -209,7 +211,7 @@ export default function CustomerMenuPage() {
                     {selectedItem.extras.map((extra, i) => (
                       <div key={i} className="flex items-center justify-between text-sm">
                         <span className="text-gray-700">{extra.name}</span>
-                        <span className="font-bold text-indigo-600">+{extra.price} ر.س</span>
+                        <span className="font-bold text-indigo-600">+{extra.price} {currencySymbol}</span>
                       </div>
                     ))}
                   </div>

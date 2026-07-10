@@ -33,6 +33,7 @@ export interface RestaurantRow {
   plan: Plan;
   tables_count: number;
   is_active: boolean;
+  currency: string;
   created_at: string;
 }
 

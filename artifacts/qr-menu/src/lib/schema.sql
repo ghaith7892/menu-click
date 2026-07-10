@@ -40,9 +40,13 @@ create table if not exists public.restaurants (
   plan text not null default 'free' check (plan in ('free', 'pro', 'enterprise')),
   tables_count integer not null default 5,
   is_active boolean not null default true,
+  currency text not null default 'SAR',
   created_at timestamptz not null default now()
 );
 alter table public.restaurants enable row level security;
+
+-- If the restaurants table already existed before this column was added, run:
+-- alter table public.restaurants add column if not exists currency text not null default 'SAR';
 create policy "Owners can manage own restaurants" on public.restaurants
   for all using (auth.uid() = owner_id);
 create policy "Anyone can read active restaurants" on public.restaurants
