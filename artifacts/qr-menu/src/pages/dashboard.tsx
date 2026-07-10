@@ -564,9 +564,13 @@ export default function DashboardPage() {
         ]);
         setCategories(cats);
         setMenuItems(items);
+        if (rest.language && rest.language !== lang) {
+          setLang(rest.language);
+        }
       }
       setDataLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const handleLogout = () => { logout(); navigate("/login"); };
@@ -601,8 +605,12 @@ export default function DashboardPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     setLang(pendingLang);
+    if (restaurant && restaurant.language !== pendingLang) {
+      const { data } = await updateRestaurant(restaurant.id, { language: pendingLang });
+      if (data) setRestaurant(data);
+    }
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2500);
   };

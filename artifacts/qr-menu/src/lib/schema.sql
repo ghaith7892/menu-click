@@ -41,12 +41,14 @@ create table if not exists public.restaurants (
   tables_count integer not null default 5,
   is_active boolean not null default true,
   currency text not null default 'SAR',
+  language text not null default 'ar' check (language in ('ar', 'en')),
   created_at timestamptz not null default now()
 );
 alter table public.restaurants enable row level security;
 
--- If the restaurants table already existed before this column was added, run:
+-- If the restaurants table already existed before these columns were added, run:
 -- alter table public.restaurants add column if not exists currency text not null default 'SAR';
+-- alter table public.restaurants add column if not exists language text not null default 'ar' check (language in ('ar', 'en'));
 create policy "Owners can manage own restaurants" on public.restaurants
   for all using (auth.uid() = owner_id);
 create policy "Anyone can read active restaurants" on public.restaurants
