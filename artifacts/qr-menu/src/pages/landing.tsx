@@ -62,12 +62,12 @@ function SlidePreview() {
 /* ─── Slide data ─────────────────────────────────────────── */
 const SLIDES = [
   {
-    title: "Create a free menu",
+    title: "",
     illustration: <SlideQR />,
     ctaLabel: "Continue",
   },
   {
-    title: "Create a free menu",
+    title: "",
     illustration: <SlideMenu />,
     ctaLabel: "Continue",
   },
@@ -119,7 +119,7 @@ function CarouselHero() {
         {SLIDES.map((s, i) => (
           <div
             key={i}
-            className="absolute inset-0 flex flex-col items-center justify-center px-6 transition-all duration-500"
+            className="absolute inset-0 flex flex-col items-center justify-start pt-10 px-6 transition-all duration-500"
             style={{
               opacity: i === current ? 1 : 0,
               transform: i === current ? "translateX(0)" : i < current ? "translateX(8%)" : "translateX(-8%)",

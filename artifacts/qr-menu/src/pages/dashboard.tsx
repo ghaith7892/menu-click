@@ -13,6 +13,7 @@ import {
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant
 } from "@/lib/api";
+import { CURRENCIES, getCurrencySymbol } from "@/lib/currencies";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/auth-context";
 import { useLang, type Lang } from "@/context/lang-context";
@@ -41,13 +42,14 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 /* ─── Item Modal (Menusa style) ───────────────────── */
 function ItemModal({
-  open, onClose, categories, restaurantId, onAdd,
+  open, onClose, categories, restaurantId, onAdd, currencySymbol,
 }: {
   open: boolean;
   onClose: () => void;
   categories: CategoryRow[];
   restaurantId: string;
   onAdd: (item: MenuItemRow) => void;
+  currencySymbol: string;
 }) {
   const [selectedCat, setSelectedCat] = useState(categories[0]?.id ?? "");
   const [name, setName] = useState("");
@@ -170,7 +172,7 @@ function ItemModal({
               <div className="flex gap-2 items-center">
                 {/* Price */}
                 <div className="flex-1">
-                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، ر.س</p>}
+                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، {currencySymbol}</p>}
                   <input
                     type="number"
                     value={v.price}
@@ -304,7 +306,7 @@ function ItemModal({
 
 /* ─── Edit Item Modal ─────────────────────────────── */
 function EditItemModal({
-  item, open, onClose, categories, onSave, onDelete,
+  item, open, onClose, categories, onSave, onDelete, currencySymbol,
 }: {
   item: MenuItemRow | null;
   open: boolean;
@@ -312,6 +314,7 @@ function EditItemModal({
   categories: CategoryRow[];
   onSave: (updated: MenuItemRow) => void;
   onDelete: (id: string) => void;
+  currencySymbol: string;
 }) {
   const [selectedCat, setSelectedCat] = useState("");
   const [name, setName] = useState("");
@@ -417,7 +420,7 @@ function EditItemModal({
 
           {/* Price */}
           <div>
-            <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، ر.س</p>
+            <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، {currencySymbol}</p>
             <input
               type="number"
               value={price}
@@ -561,9 +564,13 @@ export default function DashboardPage() {
         ]);
         setCategories(cats);
         setMenuItems(items);
+        if (rest.language && rest.language !== lang) {
+          setLang(rest.language);
+        }
       }
       setDataLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const handleLogout = () => { logout(); navigate("/login"); };
@@ -598,10 +605,23 @@ export default function DashboardPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     setLang(pendingLang);
+    if (restaurant && restaurant.language !== pendingLang) {
+      const { data } = await updateRestaurant(restaurant.id, { language: pendingLang });
+      if (data) setRestaurant(data);
+    }
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2500);
+  };
+
+  const [currencySaved, setCurrencySaved] = useState(false);
+  const handleCurrencyChange = async (code: string) => {
+    if (!restaurant) return;
+    const { data } = await updateRestaurant(restaurant.id, { currency: code });
+    if (data) setRestaurant(data);
+    setCurrencySaved(true);
+    setTimeout(() => setCurrencySaved(false), 2000);
   };
 
   const planLabel = (plan?: string) =>
@@ -772,7 +792,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <div className="p-3">
-                          <p className="text-sm font-black text-gray-900">من {item.price} {t.currency}</p>
+                          <p className="text-sm font-black text-gray-900">من {item.price} {getCurrencySymbol(restaurant?.currency)}</p>
                           <p className="text-sm text-gray-600 mt-0.5 truncate">{item.name}</p>
                           {item.description && (
                             <p className="text-xs text-gray-400 mt-1 truncate">{item.description}</p>
@@ -927,6 +947,38 @@ export default function DashboardPage() {
 
             <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
               <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-lg font-black" style={{ background: "#eef2ff", color: "#4f46e5" }}>
+                  {getCurrencySymbol(restaurant?.currency)}
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-gray-900">{t.currencySection}</p>
+                  <p className="text-xs text-gray-400">{t.currencyDesc}</p>
+                </div>
+              </div>
+              <div className="p-5 space-y-3">
+                {CURRENCIES.map(c => (
+                  <label key={c.code} onClick={() => handleCurrencyChange(c.code)}
+                    className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all ${(restaurant?.currency ?? "SAR") === c.code ? "border-indigo-500 bg-indigo-50" : "border-gray-100 hover:border-gray-200"}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="w-9 h-9 rounded-xl bg-white border border-gray-100 flex items-center justify-center text-sm font-black text-indigo-600">{c.symbol}</span>
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900">{lang === "ar" ? c.label_ar : c.label_en}</p>
+                        <p className="text-xs text-gray-400">{c.code}</p>
+                      </div>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${(restaurant?.currency ?? "SAR") === c.code ? "border-indigo-500 bg-indigo-500" : "border-gray-300"}`}>
+                      {(restaurant?.currency ?? "SAR") === c.code && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </label>
+                ))}
+                {currencySaved && (
+                  <p className="text-xs font-semibold text-green-600 text-center pt-1">{t.currencyUpdated}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+              <div className="p-5 border-b border-gray-100 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-xl bg-gray-50">
                   {restaurant?.logo ?? "🍽️"}
                 </div>
@@ -976,6 +1028,7 @@ export default function DashboardPage() {
         categories={categories}
         restaurantId={restaurant?.id ?? ""}
         onAdd={(item) => setMenuItems(prev => [...prev, item])}
+        currencySymbol={getCurrencySymbol(restaurant?.currency)}
       />
 
       {/* ── Edit Item Modal ── */}
@@ -986,6 +1039,7 @@ export default function DashboardPage() {
         categories={categories}
         onSave={(updated) => setMenuItems(prev => prev.map(i => i.id === updated.id ? updated : i))}
         onDelete={(id) => setMenuItems(prev => prev.filter(i => i.id !== id))}
+        currencySymbol={getCurrencySymbol(restaurant?.currency)}
       />
     </div>
   );

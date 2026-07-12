@@ -3,6 +3,34 @@ import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
 import { getRestaurantById, getCategories, getMenuItems } from "@/lib/api";
+import { getCurrencySymbol } from "@/lib/currencies";
+
+const customerT = {
+  ar: {
+    back: "رجوع",
+    menuLabel: "قائمة الطعام",
+    searchPlaceholder: "ابحث في المنيو...",
+    all: "الكل",
+    noItems: "لا توجد أصناف في هذا القسم",
+    availableExtras: "الإضافات المتاحة",
+    close: "إغلاق",
+    menuFallback: "المنيو",
+    font: "'Cairo', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap",
+  },
+  en: {
+    back: "Back",
+    menuLabel: "Menu",
+    searchPlaceholder: "Search the menu...",
+    all: "All",
+    noItems: "No items in this category",
+    availableExtras: "Available Extras",
+    close: "Close",
+    menuFallback: "Menu",
+    font: "'Inter', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap",
+  },
+} as const;
 
 export default function CustomerMenuPage() {
   const params = useParams<{ restaurantId: string }>();
@@ -51,10 +79,14 @@ export default function CustomerMenuPage() {
   const coverBg = restaurant?.cover_color?.startsWith("data:")
     ? undefined
     : (restaurant?.cover_color ?? "#7c3aed");
+  const currencySymbol = getCurrencySymbol(restaurant?.currency);
+  const clang = restaurant?.language ?? "ar";
+  const cdir = clang === "ar" ? "rtl" : "ltr";
+  const ct = customerT[clang];
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
+    <div className="min-h-screen bg-gray-50" dir={cdir}>
+      <style>{`@import url('${ct.fontUrl}'); * { font-family: ${ct.font}; }`}</style>
 
       {/* ── Restaurant header ── */}
       <div className="relative" style={{ background: coverBg }}>
@@ -67,20 +99,20 @@ export default function CustomerMenuPage() {
             onClick={() => navigate("/dashboard")}
             className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/25 backdrop-blur-md text-white text-sm font-bold px-3 py-2 rounded-2xl hover:bg-white/40 transition-colors shadow-sm"
           >
-            <ChevronRight className="w-4 h-4" />
-            رجوع
+            <ChevronRight className={`w-4 h-4 ${cdir === "ltr" ? "rotate-180" : ""}`} />
+            {ct.back}
           </button>
 
           <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl mx-auto mb-3 shadow-xl">
             {restaurant?.logo ?? "🍽️"}
           </div>
-          <h1 className="text-2xl font-black text-white">{restaurant?.name ?? "المنيو"}</h1>
+          <h1 className="text-2xl font-black text-white">{restaurant?.name ?? ct.menuFallback}</h1>
           {restaurant?.description && (
             <p className="text-white/80 text-sm mt-1">{restaurant.description}</p>
           )}
           <div className="mt-3 inline-flex items-center gap-1.5 bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-full backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            قائمة الطعام
+            {ct.menuLabel}
           </div>
         </div>
       </div>
@@ -91,7 +123,7 @@ export default function CustomerMenuPage() {
           <Search className="w-4 h-4 text-gray-400 shrink-0" />
           <input
             className="flex-1 text-sm bg-transparent focus:outline-none placeholder:text-gray-400 text-gray-800"
-            placeholder="ابحث في المنيو..."
+            placeholder={ct.searchPlaceholder}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -110,7 +142,7 @@ export default function CustomerMenuPage() {
             }`}
             style={activeCategory === "all" ? { background: "linear-gradient(135deg, #7c3aed, #6366f1)" } : {}}
           >
-            الكل
+            {ct.all}
           </button>
           {categories.map(cat => (
             <button
@@ -134,14 +166,14 @@ export default function CustomerMenuPage() {
         {filteredItems.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">🍽️</p>
-            <p className="text-gray-400 text-sm">لا توجد أصناف في هذا القسم</p>
+            <p className="text-gray-400 text-sm">{ct.noItems}</p>
           </div>
         ) : (
           filteredItems.map(item => (
             <button
               key={item.id}
               onClick={() => setSelectedItem(item)}
-              className="w-full bg-white rounded-2xl p-4 flex gap-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-right"
+              className={`w-full bg-white rounded-2xl p-4 flex gap-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow ${cdir === "rtl" ? "text-right" : "text-left"}`}
             >
               <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center text-4xl shrink-0 overflow-hidden">
                 {item.image?.startsWith("data:") || item.image?.startsWith("http")
@@ -159,7 +191,7 @@ export default function CustomerMenuPage() {
                 {item.description && (
                   <p className="text-xs text-gray-400 line-clamp-2 mb-2">{item.description}</p>
                 )}
-                <span className="font-black text-indigo-600 text-base">{item.price} ر.س</span>
+                <span className="font-black text-indigo-600 text-base">{item.price} {currencySymbol}</span>
               </div>
             </button>
           ))
@@ -195,7 +227,7 @@ export default function CustomerMenuPage() {
                   {selectedItem.name}
                   {selectedItem.is_popular && <span className="text-sm mr-2">🔥</span>}
                 </h2>
-                <span className="font-black text-2xl text-indigo-600 shrink-0">{selectedItem.price} ر.س</span>
+                <span className="font-black text-2xl text-indigo-600 shrink-0">{selectedItem.price} {currencySymbol}</span>
               </div>
 
               {selectedItem.description && (
@@ -204,12 +236,12 @@ export default function CustomerMenuPage() {
 
               {selectedItem.extras && selectedItem.extras.length > 0 && (
                 <div className="bg-gray-50 rounded-2xl p-4">
-                  <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">الإضافات المتاحة</p>
+                  <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">{ct.availableExtras}</p>
                   <div className="space-y-2">
                     {selectedItem.extras.map((extra, i) => (
                       <div key={i} className="flex items-center justify-between text-sm">
                         <span className="text-gray-700">{extra.name}</span>
-                        <span className="font-bold text-indigo-600">+{extra.price} ر.س</span>
+                        <span className="font-bold text-indigo-600">+{extra.price} {currencySymbol}</span>
                       </div>
                     ))}
                   </div>
@@ -220,7 +252,7 @@ export default function CustomerMenuPage() {
                 onClick={() => setSelectedItem(null)}
                 className="w-full bg-gray-100 text-gray-700 font-bold py-4 rounded-2xl text-sm hover:bg-gray-200 transition-colors mt-2"
               >
-                إغلاق
+                {ct.close}
               </button>
             </div>
           </div>
