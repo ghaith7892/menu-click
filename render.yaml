@@ -3,15 +3,11 @@ services:
     name: menuclick
     runtime: node
     region: frankfurt
-    buildCommand: "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @workspace/qr-menu run build"
-    startCommand: "pnpm --filter @workspace/qr-menu run serve"
+    buildCommand: "corepack enable && corepack prepare pnpm@10.26.1 --activate && pnpm install && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/qr-menu run build"
+    startCommand: "PORT=$PORT BASE_PATH=/ pnpm --filter @workspace/qr-menu run serve"
     envVars:
       - key: NODE_VERSION
         value: "24"
-      - key: PORT
-        value: "10000"
-      - key: BASE_PATH
-        value: "/"
       - key: NODE_ENV
         value: "production"
       - key: VITE_SUPABASE_URL
