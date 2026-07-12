@@ -1,0 +1,7 @@
+{
+  "buildCommand": "pnpm install && pnpm --filter @workspace/qr-menu run build",
+  "outputDirectory": "artifacts/qr-menu/dist/public",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
