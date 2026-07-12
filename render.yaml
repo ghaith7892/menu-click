@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: menuclick
+    runtime: node
+    region: frankfurt
+    buildCommand: "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @workspace/qr-menu run build"
+    startCommand: "pnpm --filter @workspace/qr-menu run serve"
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: PORT
+        value: "10000"
+      - key: BASE_PATH
+        value: "/"
+      - key: NODE_ENV
+        value: "production"
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
