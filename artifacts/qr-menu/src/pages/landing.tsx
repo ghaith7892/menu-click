@@ -62,12 +62,12 @@ function SlidePreview() {
 /* ─── Slide data ─────────────────────────────────────────── */
 const SLIDES = [
   {
-    title: "Create a free menu",
+    title: "",
     illustration: <SlideQR />,
     ctaLabel: "Continue",
   },
   {
-    title: "Create a free menu",
+    title: "",
     illustration: <SlideMenu />,
     ctaLabel: "Continue",
   },
