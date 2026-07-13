@@ -58,13 +58,22 @@ export default function RegisterPage() {
     if (step < 3) setStep((step + 1) as Step);
   };
 
+  const [emailSent, setEmailSent] = useState(false);
+
   const handleSubmit = async () => {
     setLoading(true);
     setError("");
     const result = await register(form);
     setLoading(false);
-    if (result.success) navigate("/dashboard");
-    else setError(result.error || "حدث خطأ، حاول مرة أخرى");
+    if (result.success) {
+      if (result.needsConfirmation) {
+        setEmailSent(true);
+      } else {
+        navigate("/dashboard");
+      }
+    } else {
+      setError(result.error || "حدث خطأ، حاول مرة أخرى");
+    }
   };
 
   const plans = [
@@ -84,6 +93,30 @@ export default function RegisterPage() {
       features: ["منيو غير محدود", "QR لكل طاولة", "طلبات مباشرة", "إحصائيات"],
     },
   ];
+
+  if (emailSent) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4" dir="rtl">
+        <div className="max-w-md w-full text-center">
+          <div className="text-6xl mb-6">📧</div>
+          <h1 className="text-2xl font-black text-foreground mb-3">تحقق من بريدك الإلكتروني</h1>
+          <p className="text-muted-foreground text-sm leading-relaxed mb-6">
+            أرسلنا رابط تأكيد إلى <span className="font-bold text-foreground">{form.email}</span>.
+            <br />افتح الرابط لتفعيل حسابك، ثم سجّل دخولك.
+          </p>
+          <button
+            onClick={() => navigate("/login")}
+            className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:brightness-110 transition-all text-sm"
+          >
+            الذهاب لصفحة تسجيل الدخول
+          </button>
+          <p className="text-xs text-muted-foreground mt-4">
+            لم تجد الرسالة؟ تحقق من مجلد البريد المزعج (Spam)
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
