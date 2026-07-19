@@ -199,7 +199,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile = await fetchUserProfile(userId);
       }
 
-      return { success: true, role: profile?.role };
+      // ✅ Set user in context immediately — don't wait for onAuthStateChange
+      // Without this, ProtectedRoute sees user=null and redirects back to /login
+      if (profile) setUser(profile);
+
+      return { success: true, role: profile?.role ?? "restaurant" };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "خطأ غير متوقع";
       return { success: false, error: translateSupabaseError(msg) };
