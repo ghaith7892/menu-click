@@ -231,12 +231,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile = await buildUserProfile(userId);
       }
 
-      if (profile && mounted.current) {
+      if (!profile) {
+        await supabase.auth.signOut();
+        return {
+          success: false,
+          error: "تعذّر تحميل بيانات حسابك — يرجى التأكد من تطبيق إصلاح SQL في Supabase Dashboard (is_admin function)",
+        };
+      }
+
+      if (mounted.current) {
         setUser(profile);
         setLoading(false);
       }
 
-      return { success: true, role: profile?.role ?? "restaurant" };
+      return { success: true, role: profile.role };
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "خطأ غير متوقع";
@@ -292,7 +300,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const profile = await buildUserProfile(userId);
-        if (profile && mounted.current) {
+        if (!profile) {
+          return {
+            success: false,
+            error: "تعذّر تحميل بيانات الحساب الجديد — يرجى التأكد من تطبيق إصلاح SQL في Supabase Dashboard",
+          };
+        }
+        if (mounted.current) {
           setUser(profile);
           setLoading(false);
         }
