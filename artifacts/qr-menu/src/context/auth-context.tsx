@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabaseConfigured } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
 export type UserRole = "admin" | "restaurant";
@@ -25,6 +25,7 @@ export interface RegisterData {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
+  configured: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: string }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string; needsConfirmation?: boolean }>;
   logout: () => void;
@@ -37,30 +38,32 @@ function translateSupabaseError(message: string): string {
     return "البريد الإلكتروني أو كلمة المرور غير صحيحة";
   if (message.includes("Email not confirmed"))
     return "يرجى تأكيد بريدك الإلكتروني أولاً — تحقق من صندوق الوارد";
-  if (message.includes("User already registered") || message.includes("already been registered"))
+  if (message.includes("User already registered") || message.includes("already been registered") || message.includes("already registered"))
     return "هذا البريد الإلكتروني مسجّل مسبقاً";
   if (message.includes("Password should be at least"))
     return "كلمة المرور يجب أن تكون 6 أحرف على الأقل";
   if (message.includes("Unable to validate email address"))
     return "صيغة البريد الإلكتروني غير صحيحة";
   if (message.includes("signup is disabled") || message.includes("Signups not allowed"))
-    return "التسجيل مغلق حالياً، يرجى المحاولة لاحقاً";
+    return "التسجيل مغلق حالياً — تحقق من إعدادات Supabase → Authentication → Providers";
   if (message.includes("rate limit") || message.includes("too many requests"))
     return "طلبات كثيرة، يرجى الانتظار دقيقة والمحاولة مجدداً";
-  if (message.includes("network") || message.includes("fetch"))
-    return "خطأ في الاتصال بالشبكة، تحقق من اتصالك بالإنترنت";
-  return message;
+  if (message.includes("fetch") || message.includes("network") || message.includes("Failed to fetch") || message.includes("NetworkError"))
+    return "تعذّر الاتصال بالخادم — تأكد من إعداد VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY بشكل صحيح";
+  if (message.includes("Invalid API key") || message.includes("invalid key") || message.includes("apikey"))
+    return "مفتاح Supabase غير صحيح — تحقق من VITE_SUPABASE_ANON_KEY";
+  return `خطأ: ${message}`;
 }
 
 async function fetchUserProfile(userId: string): Promise<AuthUser | null> {
   try {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("*")
       .eq("id", userId)
       .single();
 
-    if (!profile) return null;
+    if (profileError || !profile) return null;
 
     const result: AuthUser = {
       id: profile.id,
@@ -87,6 +90,17 @@ async function fetchUserProfile(userId: string): Promise<AuthUser | null> {
   } catch {
     return null;
   }
+}
+
+async function createRestaurantForUser(userId: string, name: string, plan: "free" | "pro" = "free") {
+  const { error } = await supabase.from("restaurants").insert({
+    id: crypto.randomUUID(),
+    owner_id: userId,
+    name,
+    plan,
+    tables_count: 5,
+  });
+  return error;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -118,6 +132,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
+    if (!supabaseConfigured) {
+      return {
+        success: false,
+        error: "التطبيق غير مُهيَّأ: يرجى ضبط VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY في متغيرات البيئة",
+      };
+    }
+
     try {
       const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
@@ -126,7 +147,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authData.session) {
         return { success: false, error: "يرجى تأكيد بريدك الإلكتروني أولاً — تحقق من صندوق الوارد" };
       }
-      const profile = await fetchUserProfile(authData.session.user.id);
+
+      const userId = authData.session.user.id;
+      let profile = await fetchUserProfile(userId);
+
+      if (profile?.role === "restaurant" && !profile.restaurantId) {
+        const pendingKey = `pending_restaurant_${userId}`;
+        const pendingRaw = localStorage.getItem(pendingKey);
+        let restaurantName = profile.name ? `مطعم ${profile.name}` : "مطعمي";
+        let plan: "free" | "pro" = "free";
+
+        if (pendingRaw) {
+          try {
+            const pending = JSON.parse(pendingRaw) as { name: string; plan: "free" | "pro" };
+            if (pending.name) restaurantName = pending.name;
+            if (pending.plan) plan = pending.plan;
+          } catch { /* ignore */ }
+          localStorage.removeItem(pendingKey);
+        }
+
+        await createRestaurantForUser(userId, restaurantName, plan);
+        profile = await fetchUserProfile(userId);
+      }
+
       return { success: true, role: profile?.role };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "خطأ غير متوقع";
@@ -135,6 +178,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (data: RegisterData) => {
+    if (!supabaseConfigured) {
+      return {
+        success: false,
+        error: "التطبيق غير مُهيَّأ: يرجى ضبط VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY في متغيرات البيئة",
+      };
+    }
+
     try {
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: data.email,
@@ -152,24 +202,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const userId = authData.user?.id;
-      if (!userId) return { success: false, error: "حدث خطأ غير متوقع أثناء إنشاء الحساب" };
+      if (!userId) {
+        return { success: false, error: "حدث خطأ غير متوقع أثناء إنشاء الحساب — لم يُعَد معرّف المستخدم" };
+      }
 
       const needsConfirmation = !authData.session;
 
       if (!needsConfirmation) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 800));
 
-        const { error: restaurantError } = await supabase.from("restaurants").insert({
-          id: crypto.randomUUID(),
-          owner_id: userId,
-          name: data.restaurantName,
-          plan: data.plan,
-          tables_count: 5,
-        } as Record<string, unknown>);
+        const restaurantError = await createRestaurantForUser(userId, data.restaurantName, data.plan);
 
         if (restaurantError) {
-          console.warn("Restaurant insert error:", restaurantError.message);
+          console.error("Restaurant insert error:", restaurantError.message, restaurantError.code);
+          if (restaurantError.message.includes("violates row-level security") || restaurantError.code === "42501") {
+            return {
+              success: false,
+              error: "خطأ في صلاحيات قاعدة البيانات — تأكد من تشغيل SQL script كاملاً في Supabase",
+            };
+          }
         }
+      } else {
+        localStorage.setItem(
+          `pending_restaurant_${userId}`,
+          JSON.stringify({ name: data.restaurantName, plan: data.plan })
+        );
       }
 
       return { success: true, needsConfirmation };
@@ -185,7 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, configured: supabaseConfigured, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
