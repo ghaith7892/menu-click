@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
-import type { Session } from "@supabase/supabase-js";
 
 export type UserRole = "admin" | "restaurant";
 
@@ -28,11 +27,12 @@ interface AuthContextType {
   configured: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: string }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string; needsConfirmation?: boolean }>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// ─── Error translation ────────────────────────────────────────────────────────
 function translateSupabaseError(message: string): string {
   if (message.includes("Invalid login credentials") || message.includes("invalid_credentials"))
     return "البريد الإلكتروني أو كلمة المرور غير صحيحة";
@@ -55,99 +55,141 @@ function translateSupabaseError(message: string): string {
   return `خطأ: ${message}`;
 }
 
-async function fetchUserProfile(userId: string): Promise<AuthUser | null> {
-  try {
-    let { data: profile } = await supabase
+// ─── Build AuthUser from DB ────────────────────────────────────────────────────
+async function buildUserProfile(userId: string): Promise<AuthUser | null> {
+  // 1. Fetch from public.users
+  const { data: profile, error: profileErr } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (profileErr && profileErr.code !== "PGRST116") {
+    // PGRST116 = row not found — anything else is a real error
+    console.error("[auth] users SELECT error:", profileErr.message, profileErr.code);
+  }
+
+  // 2. If no profile yet, create it from auth.users metadata (trigger may have missed it)
+  if (!profile) {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return null;
+
+    const name =
+      (authUser.user_metadata?.name as string | undefined) ||
+      authUser.email?.split("@")[0] ||
+      "مستخدم";
+    const role =
+      (authUser.user_metadata?.role as string | undefined) || "restaurant";
+
+    const { error: upsertErr } = await supabase.from("users").upsert({
+      id: authUser.id,
+      name,
+      email: authUser.email ?? "",
+      role,
+    });
+
+    if (upsertErr) {
+      console.error("[auth] users upsert error:", upsertErr.message, upsertErr.code);
+      return null;
+    }
+
+    // Re-fetch after upsert
+    const { data: created } = await supabase
       .from("users")
       .select("*")
       .eq("id", userId)
       .single();
 
-    // If profile doesn't exist yet (trigger may not have fired for old accounts),
-    // create it from the auth user data
-    if (!profile) {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return null;
-
-      const name =
-        (authUser.user_metadata?.name as string | undefined) ||
-        authUser.email?.split("@")[0] ||
-        "مستخدم";
-      const role =
-        (authUser.user_metadata?.role as string | undefined) || "restaurant";
-
-      await supabase.from("users").upsert({
-        id: authUser.id,
-        name,
-        email: authUser.email ?? "",
-        role,
-      });
-
-      const { data: created } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-      profile = created;
-    }
-
-    if (!profile) return null;
+    if (!created) return null;
 
     const result: AuthUser = {
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      role: profile.role,
+      id: created.id,
+      name: created.name,
+      email: created.email,
+      role: created.role,
     };
 
-    if (profile.role === "restaurant") {
-      const { data: restaurant } = await supabase
+    if (created.role === "restaurant") {
+      const { data: rest } = await supabase
         .from("restaurants")
         .select("id, name, plan")
         .eq("owner_id", userId)
-        .single();
-
-      if (restaurant) {
-        result.restaurantId = restaurant.id;
-        result.restaurantName = restaurant.name;
-        result.plan = restaurant.plan;
+        .maybeSingle();
+      if (rest) {
+        result.restaurantId = rest.id;
+        result.restaurantName = rest.name;
+        result.plan = rest.plan;
       }
     }
 
     return result;
-  } catch {
-    return null;
   }
+
+  // 3. Profile exists — build result
+  const result: AuthUser = {
+    id: profile.id,
+    name: profile.name,
+    email: profile.email,
+    role: profile.role,
+  };
+
+  if (profile.role === "restaurant") {
+    const { data: rest } = await supabase
+      .from("restaurants")
+      .select("id, name, plan")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    if (rest) {
+      result.restaurantId = rest.id;
+      result.restaurantName = rest.name;
+      result.plan = rest.plan;
+    }
+  }
+
+  return result;
 }
 
-async function createRestaurantForUser(userId: string, name: string, plan: "free" | "pro" = "free") {
-  const { error } = await supabase.from("restaurants").insert({
-    id: crypto.randomUUID(),
-    owner_id: userId,
-    name,
-    plan,
-    tables_count: 5,
-  });
-  return error;
-}
-
+// ─── Provider ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  // loading = true  →  we are still determining auth state (show spinner in ProtectedRoute)
+  // loading = false →  auth state is known (user is set or null)
   const [loading, setLoading] = useState(true);
 
+  // Prevent state updates after unmount
+  const mounted = useRef(true);
   useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    // ── 1. Read existing session on mount ────────────────────────────────────
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) await loadUser(session);
-      setLoading(false);
+      if (!mounted.current) return;
+      if (session) {
+        const profile = await buildUserProfile(session.user.id);
+        if (mounted.current) setUser(profile);
+      }
+      if (mounted.current) setLoading(false);
     });
 
+    // ── 2. React to future auth events ───────────────────────────────────────
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        if (!mounted.current) return;
+
         if (session) {
-          await loadUser(session);
+          // Keep loading=true while we fetch the profile so ProtectedRoute shows spinner
+          setLoading(true);
+          const profile = await buildUserProfile(session.user.id);
+          if (!mounted.current) return;
+          if (profile) setUser(profile);
+          setLoading(false);
         } else {
+          // Signed out
           setUser(null);
+          setLoading(false);
         }
       }
     );
@@ -155,11 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadUser = async (session: Session) => {
-    const profile = await fetchUserProfile(session.user.id);
-    setUser(profile);
-  };
-
+  // ─── login ────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
     if (!supabaseConfigured) {
       return {
@@ -170,16 +208,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
+
       if (error) {
         return { success: false, error: translateSupabaseError(error.message) };
       }
       if (!authData.session) {
-        return { success: false, error: "يرجى تأكيد بريدك الإلكتروني أولاً — تحقق من صندوق الوارد" };
+        return {
+          success: false,
+          error: "يرجى تأكيد بريدك الإلكتروني أولاً — تحقق من صندوق الوارد",
+        };
       }
 
+      // signInWithPassword already triggers onAuthStateChange which will set user + loading.
+      // We also set it here directly so navigation can proceed immediately without waiting
+      // for the onAuthStateChange async chain to complete.
       const userId = authData.session.user.id;
-      let profile = await fetchUserProfile(userId);
+      let profile = await buildUserProfile(userId);
 
+      // If user has restaurant role but no restaurant yet, create one automatically
       if (profile?.role === "restaurant" && !profile.restaurantId) {
         const pendingKey = `pending_restaurant_${userId}`;
         const pendingRaw = localStorage.getItem(pendingKey);
@@ -195,21 +241,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem(pendingKey);
         }
 
-        await createRestaurantForUser(userId, restaurantName, plan);
-        profile = await fetchUserProfile(userId);
+        await supabase.from("restaurants").insert({
+          id: crypto.randomUUID(),
+          owner_id: userId,
+          name: restaurantName,
+          plan,
+          tables_count: 5,
+        });
+
+        // Re-fetch with restaurant
+        profile = await buildUserProfile(userId);
       }
 
-      // ✅ Set user in context immediately — don't wait for onAuthStateChange
-      // Without this, ProtectedRoute sees user=null and redirects back to /login
-      if (profile) setUser(profile);
+      // ✅ Set user immediately — don't wait for onAuthStateChange to finish
+      if (profile && mounted.current) {
+        setUser(profile);
+        setLoading(false);
+      }
 
       return { success: true, role: profile?.role ?? "restaurant" };
+
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "خطأ غير متوقع";
       return { success: false, error: translateSupabaseError(msg) };
     }
   };
 
+  // ─── register ─────────────────────────────────────────────────────────────
   const register = async (data: RegisterData) => {
     if (!supabaseConfigured) {
       return {
@@ -222,12 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
-        options: {
-          data: {
-            name: data.ownerName,
-            role: "restaurant",
-          },
-        },
+        options: { data: { name: data.ownerName, role: "restaurant" } },
       });
 
       if (signUpError) {
@@ -236,26 +289,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const userId = authData.user?.id;
       if (!userId) {
-        return { success: false, error: "حدث خطأ غير متوقع أثناء إنشاء الحساب — لم يُعَد معرّف المستخدم" };
+        return { success: false, error: "حدث خطأ غير متوقع — لم يُعَد معرّف المستخدم" };
       }
 
       const needsConfirmation = !authData.session;
 
       if (!needsConfirmation) {
-        await new Promise(r => setTimeout(r, 800));
+        // Small delay so DB trigger has time to create the user row
+        await new Promise(r => setTimeout(r, 1000));
 
-        const restaurantError = await createRestaurantForUser(userId, data.restaurantName, data.plan);
+        // Create restaurant
+        const { error: restErr } = await supabase.from("restaurants").insert({
+          id: crypto.randomUUID(),
+          owner_id: userId,
+          name: data.restaurantName,
+          plan: data.plan,
+          tables_count: 5,
+        });
 
-        if (restaurantError) {
-          console.error("Restaurant insert error:", restaurantError.message, restaurantError.code);
-          if (restaurantError.message.includes("violates row-level security") || restaurantError.code === "42501") {
+        if (restErr) {
+          console.error("[auth] restaurant insert error:", restErr.message, restErr.code);
+          if (restErr.code === "42501") {
             return {
               success: false,
               error: "خطأ في صلاحيات قاعدة البيانات — تأكد من تشغيل SQL script كاملاً في Supabase",
             };
           }
         }
+
+        // Build and set user profile immediately
+        const profile = await buildUserProfile(userId);
+        if (profile && mounted.current) {
+          setUser(profile);
+          setLoading(false);
+        }
+
       } else {
+        // Email confirmation required — save restaurant info for after confirmation
         localStorage.setItem(
           `pending_restaurant_${userId}`,
           JSON.stringify({ name: data.restaurantName, plan: data.plan })
@@ -263,12 +333,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       return { success: true, needsConfirmation };
+
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "خطأ غير متوقع";
       return { success: false, error: translateSupabaseError(msg) };
     }
   };
 
+  // ─── logout ───────────────────────────────────────────────────────────────
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
