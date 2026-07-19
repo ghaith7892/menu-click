@@ -32,7 +32,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// ─── Error translation ────────────────────────────────────────────────────────
 function translateSupabaseError(message: string): string {
   if (message.includes("Invalid login credentials") || message.includes("invalid_credentials"))
     return "البريد الإلكتروني أو كلمة المرور غير صحيحة";
@@ -45,19 +44,17 @@ function translateSupabaseError(message: string): string {
   if (message.includes("Unable to validate email address"))
     return "صيغة البريد الإلكتروني غير صحيحة";
   if (message.includes("signup is disabled") || message.includes("Signups not allowed"))
-    return "التسجيل مغلق حالياً — تحقق من إعدادات Supabase → Authentication → Providers";
+    return "التسجيل مغلق حالياً — تحقق من إعدادات Supabase";
   if (message.includes("rate limit") || message.includes("too many requests"))
     return "طلبات كثيرة، يرجى الانتظار دقيقة والمحاولة مجدداً";
   if (message.includes("fetch") || message.includes("network") || message.includes("Failed to fetch") || message.includes("NetworkError"))
-    return "تعذّر الاتصال بالخادم — تأكد من إعداد VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY بشكل صحيح";
+    return "تعذّر الاتصال بالخادم — تأكد من إعداد VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY";
   if (message.includes("Invalid API key") || message.includes("invalid key") || message.includes("apikey"))
     return "مفتاح Supabase غير صحيح — تحقق من VITE_SUPABASE_ANON_KEY";
-  return `خطأ: ${message}`;
+  return "خطأ: " + message;
 }
 
-// ─── Build AuthUser from DB ────────────────────────────────────────────────────
 async function buildUserProfile(userId: string): Promise<AuthUser | null> {
-  // 1. Fetch from public.users
   const { data: profile, error: profileErr } = await supabase
     .from("users")
     .select("*")
@@ -65,11 +62,9 @@ async function buildUserProfile(userId: string): Promise<AuthUser | null> {
     .single();
 
   if (profileErr && profileErr.code !== "PGRST116") {
-    // PGRST116 = row not found — anything else is a real error
     console.error("[auth] users SELECT error:", profileErr.message, profileErr.code);
   }
 
-  // 2. If no profile yet, create it from auth.users metadata (trigger may have missed it)
   if (!profile) {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return null;
@@ -93,7 +88,6 @@ async function buildUserProfile(userId: string): Promise<AuthUser | null> {
       return null;
     }
 
-    // Re-fetch after upsert
     const { data: created } = await supabase
       .from("users")
       .select("*")
@@ -125,7 +119,6 @@ async function buildUserProfile(userId: string): Promise<AuthUser | null> {
     return result;
   }
 
-  // 3. Profile exists — build result
   const result: AuthUser = {
     id: profile.id,
     name: profile.name,
@@ -149,14 +142,10 @@ async function buildUserProfile(userId: string): Promise<AuthUser | null> {
   return result;
 }
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  // loading = true  →  we are still determining auth state (show spinner in ProtectedRoute)
-  // loading = false →  auth state is known (user is set or null)
   const [loading, setLoading] = useState(true);
 
-  // Prevent state updates after unmount
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -164,7 +153,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // ── 1. Read existing session on mount ────────────────────────────────────
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted.current) return;
       if (session) {
@@ -174,20 +162,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted.current) setLoading(false);
     });
 
-    // ── 2. React to future auth events ───────────────────────────────────────
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         if (!mounted.current) return;
-
         if (session) {
-          // Keep loading=true while we fetch the profile so ProtectedRoute shows spinner
           setLoading(true);
           const profile = await buildUserProfile(session.user.id);
           if (!mounted.current) return;
           if (profile) setUser(profile);
           setLoading(false);
         } else {
-          // Signed out
           setUser(null);
           setLoading(false);
         }
@@ -197,7 +181,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ─── login ────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
     if (!supabaseConfigured) {
       return {
@@ -219,17 +202,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      // signInWithPassword already triggers onAuthStateChange which will set user + loading.
-      // We also set it here directly so navigation can proceed immediately without waiting
-      // for the onAuthStateChange async chain to complete.
       const userId = authData.session.user.id;
       let profile = await buildUserProfile(userId);
 
-      // If user has restaurant role but no restaurant yet, create one automatically
       if (profile?.role === "restaurant" && !profile.restaurantId) {
-        const pendingKey = `pending_restaurant_${userId}`;
+        const pendingKey = "pending_restaurant_" + userId;
         const pendingRaw = localStorage.getItem(pendingKey);
-        let restaurantName = profile.name ? `مطعم ${profile.name}` : "مطعمي";
+        let restaurantName = profile.name ? "مطعم " + profile.name : "مطعمي";
         let plan: "free" | "pro" = "free";
 
         if (pendingRaw) {
@@ -249,11 +228,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           tables_count: 5,
         });
 
-        // Re-fetch with restaurant
         profile = await buildUserProfile(userId);
       }
 
-      // ✅ Set user immediately — don't wait for onAuthStateChange to finish
       if (profile && mounted.current) {
         setUser(profile);
         setLoading(false);
@@ -267,7 +244,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ─── register ─────────────────────────────────────────────────────────────
   const register = async (data: RegisterData) => {
     if (!supabaseConfigured) {
       return {
@@ -295,10 +271,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const needsConfirmation = !authData.session;
 
       if (!needsConfirmation) {
-        // Small delay so DB trigger has time to create the user row
         await new Promise(r => setTimeout(r, 1000));
 
-        // Create restaurant
         const { error: restErr } = await supabase.from("restaurants").insert({
           id: crypto.randomUUID(),
           owner_id: userId,
@@ -317,7 +291,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Build and set user profile immediately
         const profile = await buildUserProfile(userId);
         if (profile && mounted.current) {
           setUser(profile);
@@ -325,9 +298,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
       } else {
-        // Email confirmation required — save restaurant info for after confirmation
         localStorage.setItem(
-          `pending_restaurant_${userId}`,
+          "pending_restaurant_" + userId,
           JSON.stringify({ name: data.restaurantName, plan: data.plan })
         );
       }
@@ -340,7 +312,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ─── logout ───────────────────────────────────────────────────────────────
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
