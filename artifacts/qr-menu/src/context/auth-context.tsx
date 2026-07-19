@@ -57,13 +57,42 @@ function translateSupabaseError(message: string): string {
 
 async function fetchUserProfile(userId: string): Promise<AuthUser | null> {
   try {
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile } = await supabase
       .from("users")
       .select("*")
       .eq("id", userId)
       .single();
 
-    if (profileError || !profile) return null;
+    // If profile doesn't exist yet (trigger may not have fired for old accounts),
+    // create it from the auth user data
+    if (!profile) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return null;
+
+      const name =
+        (authUser.user_metadata?.name as string | undefined) ||
+        authUser.email?.split("@")[0] ||
+        "مستخدم";
+      const role =
+        (authUser.user_metadata?.role as string | undefined) || "restaurant";
+
+      await supabase.from("users").upsert({
+        id: authUser.id,
+        name,
+        email: authUser.email ?? "",
+        role,
+      });
+
+      const { data: created } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      profile = created;
+    }
+
+    if (!profile) return null;
 
     const result: AuthUser = {
       id: profile.id,
