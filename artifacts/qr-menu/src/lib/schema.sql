@@ -279,9 +279,21 @@ create policy "Users can delete their own menu images"
 
 -- ================================================================
 -- SECTION 7: REALTIME (live order updates in dashboard)
+-- Safe: only adds if not already a member
 -- ================================================================
 
-alter publication supabase_realtime add table public.orders;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename  = 'orders'
+  ) then
+    alter publication supabase_realtime add table public.orders;
+  end if;
+end;
+$$;
 
 
 -- ================================================================
