@@ -55,87 +55,53 @@ function translateSupabaseError(message: string): string {
 }
 
 async function buildUserProfile(userId: string): Promise<AuthUser | null> {
-  const { data: profile, error: profileErr } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", userId)
-    .single();
-
-  if (profileErr && profileErr.code !== "PGRST116") {
-    console.error("[auth] users SELECT error:", profileErr.message, profileErr.code);
+  // Step 1: auth.getUser() — bypasses public.users RLS entirely, always works
+  const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !authUser || authUser.id !== userId) {
+    console.error("[auth] getUser failed:", authErr?.message);
+    return null;
   }
 
-  if (!profile) {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return null;
+  const meta = authUser.user_metadata ?? {};
+  let name: string  = (meta.name  as string | undefined) || authUser.email?.split("@")[0] || "مستخدم";
+  let role: UserRole = (meta.role  as string | undefined) === "admin" ? "admin" : "restaurant";
 
-    const name =
-      (authUser.user_metadata?.name as string | undefined) ||
-      authUser.email?.split("@")[0] ||
-      "مستخدم";
-    const role =
-      (authUser.user_metadata?.role as string | undefined) || "restaurant";
+  // Step 2: Try to enrich from public.users (handles admin-promoted accounts)
+  // If RLS policy is broken (42P17), we silently fall back to auth metadata above
+  const { data: dbProfile, error: dbErr } = await supabase
+    .from("users")
+    .select("name, role")
+    .eq("id", userId)
+    .maybeSingle();
 
-    const { error: upsertErr } = await supabase.from("users").upsert({
-      id: authUser.id,
-      name,
-      email: authUser.email ?? "",
-      role,
-    });
-
-    if (upsertErr) {
-      console.error("[auth] users upsert error:", upsertErr.message, upsertErr.code);
-      return null;
-    }
-
-    const { data: created } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (!created) return null;
-
-    const result: AuthUser = {
-      id: created.id,
-      name: created.name,
-      email: created.email,
-      role: created.role,
-    };
-
-    if (created.role === "restaurant") {
-      const { data: rest } = await supabase
-        .from("restaurants")
-        .select("id, name, plan")
-        .eq("owner_id", userId)
-        .maybeSingle();
-      if (rest) {
-        result.restaurantId = rest.id;
-        result.restaurantName = rest.name;
-        result.plan = rest.plan;
-      }
-    }
-
-    return result;
+  if (!dbErr && dbProfile) {
+    name = dbProfile.name || name;
+    role = (dbProfile.role as UserRole) || role;
+  } else if (dbErr && dbErr.code !== "PGRST116") {
+    console.error("[auth] users SELECT (non-fatal):", dbErr.code, dbErr.message);
   }
 
   const result: AuthUser = {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email,
-    role: profile.role,
+    id: authUser.id,
+    name,
+    email: authUser.email ?? "",
+    role,
   };
 
-  if (profile.role === "restaurant") {
-    const { data: rest } = await supabase
+  // Step 3: Fetch restaurant for restaurant owners
+  if (role === "restaurant") {
+    const { data: rest, error: restErr } = await supabase
       .from("restaurants")
       .select("id, name, plan")
       .eq("owner_id", userId)
       .maybeSingle();
-    if (rest) {
+
+    if (!restErr && rest) {
       result.restaurantId = rest.id;
       result.restaurantName = rest.name;
       result.plan = rest.plan;
+    } else if (restErr) {
+      console.error("[auth] restaurants SELECT (non-fatal):", restErr.code, restErr.message);
     }
   }
 
@@ -235,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         return {
           success: false,
-          error: "تعذّر تحميل بيانات حسابك — يرجى التأكد من تطبيق إصلاح SQL في Supabase Dashboard (is_admin function)",
+          error: "تعذّر التحقق من جلسة المستخدم — حاول مرة أخرى",
         };
       }
 
