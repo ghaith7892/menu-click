@@ -116,6 +116,25 @@ alter table public.orders      enable row level security;
 
 
 -- ================================================================
+-- SECTION 3b: is_admin() HELPER — must exist before RLS policies
+-- security definer bypasses RLS to avoid infinite recursion (42P17)
+-- ================================================================
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.users
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+
+-- ================================================================
 -- SECTION 4: RLS POLICIES
 -- ================================================================
 
@@ -134,12 +153,7 @@ create policy "Service can insert users"
 
 create policy "Admins can read all users"
   on public.users for select
-  using (
-    exists (
-      select 1 from public.users u
-      where u.id = auth.uid() and u.role = 'admin'
-    )
-  );
+  using (public.is_admin());
 
 -- ── restaurants ────────────────────────────────────────────────
 create policy "Owners can manage own restaurants"
@@ -152,12 +166,7 @@ create policy "Anyone can read active restaurants"
 
 create policy "Admins can manage all restaurants"
   on public.restaurants for all
-  using (
-    exists (
-      select 1 from public.users u
-      where u.id = auth.uid() and u.role = 'admin'
-    )
-  );
+  using (public.is_admin());
 
 -- ── categories ─────────────────────────────────────────────────
 create policy "Owners manage own categories"
