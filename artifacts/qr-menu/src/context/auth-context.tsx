@@ -66,21 +66,6 @@ async function buildUserProfile(userId: string): Promise<AuthUser | null> {
   let name: string  = (meta.name  as string | undefined) || authUser.email?.split("@")[0] || "مستخدم";
   let role: UserRole = (meta.role  as string | undefined) === "admin" ? "admin" : "restaurant";
 
-  // Step 2: Try to enrich from public.users (handles admin-promoted accounts)
-  // If RLS policy is broken (42P17), we silently fall back to auth metadata above
-  const { data: dbProfile, error: dbErr } = await supabase
-    .from("users")
-    .select("name, role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (!dbErr && dbProfile) {
-    name = dbProfile.name || name;
-    role = (dbProfile.role as UserRole) || role;
-  } else if (dbErr && dbErr.code !== "PGRST116") {
-    console.error("[auth] users SELECT (non-fatal):", dbErr.code, dbErr.message);
-  }
-
   const result: AuthUser = {
     id: authUser.id,
     name,
