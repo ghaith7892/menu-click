@@ -28,12 +28,11 @@ export async function updateRestaurant(id: string, updates: Partial<RestaurantRo
 
 // ─── Categories ─────────────────────────────────────────────
 export async function getCategories(restaurantId: string): Promise<CategoryRow[]> {
-  const { data } = await supabase
-    .from("categories")
-    .select("*")
-    .eq("restaurant_id", restaurantId)
-    .order("sort_order");
-  return (data as CategoryRow[]) ?? [];
+  const { data, error } = await supabase.rpc("get_categories_by_restaurant", {
+    p_restaurant_id: restaurantId,
+  });
+  if (error) console.error("[api] get_categories_by_restaurant:", error.message);
+  return (Array.isArray(data) ? data : []) as CategoryRow[];
 }
 
 export async function createCategory(restaurantId: string, name: string, icon = "🍽️") {
@@ -66,12 +65,11 @@ export async function deleteCategory(id: string) {
 
 // ─── Menu Items ─────────────────────────────────────────────
 export async function getMenuItems(restaurantId: string): Promise<MenuItemRow[]> {
-  const { data } = await supabase
-    .from("menu_items")
-    .select("*")
-    .eq("restaurant_id", restaurantId)
-    .order("sort_order");
-  return (data as MenuItemRow[]) ?? [];
+  const { data, error } = await supabase.rpc("get_menu_items_by_restaurant", {
+    p_restaurant_id: restaurantId,
+  });
+  if (error) console.error("[api] get_menu_items_by_restaurant:", error.message);
+  return (Array.isArray(data) ? data : []) as MenuItemRow[];
 }
 
 export async function createMenuItem(item: Omit<MenuItemRow, "created_at">) {
