@@ -73,20 +73,18 @@ async function buildUserProfile(userId: string): Promise<AuthUser | null> {
     role,
   };
 
-  // Step 3: Fetch restaurant for restaurant owners
+  // Step 3: Fetch restaurant via security definer RPC (bypasses RLS)
   if (role === "restaurant") {
-    const { data: rest, error: restErr } = await supabase
-      .from("restaurants")
-      .select("id, name, plan")
-      .eq("owner_id", userId)
-      .maybeSingle();
-
-    if (!restErr && rest) {
+    const { data: rpcRows, error: rpcErr } = await supabase.rpc("get_restaurant_by_owner", {
+      p_owner_id: userId,
+    });
+    const rest = Array.isArray(rpcRows) && rpcRows.length > 0 ? rpcRows[0] : null;
+    if (!rpcErr && rest) {
       result.restaurantId = rest.id;
       result.restaurantName = rest.name;
       result.plan = rest.plan;
-    } else if (restErr) {
-      console.error("[auth] restaurants SELECT (non-fatal):", restErr.code, restErr.message);
+    } else if (rpcErr) {
+      console.error("[auth] get_restaurant_by_owner RPC error:", rpcErr.message);
     }
   }
 
@@ -171,12 +169,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem(pendingKey);
         }
 
-        await supabase.from("restaurants").insert({
-          id: crypto.randomUUID(),
-          owner_id: userId,
-          name: restaurantName,
-          plan,
-          tables_count: 5,
+        await supabase.rpc("insert_restaurant", {
+          p_id: crypto.randomUUID(),
+          p_owner_id: userId,
+          p_name: restaurantName,
+          p_plan: plan,
         });
 
         profile = await buildUserProfile(userId);
@@ -232,22 +229,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!needsConfirmation) {
         await new Promise(r => setTimeout(r, 1000));
 
-        const { error: restErr } = await supabase.from("restaurants").insert({
-          id: crypto.randomUUID(),
-          owner_id: userId,
-          name: data.restaurantName,
-          plan: data.plan,
-          tables_count: 5,
+        const { error: restErr } = await supabase.rpc("insert_restaurant", {
+          p_id: crypto.randomUUID(),
+          p_owner_id: userId,
+          p_name: data.restaurantName,
+          p_plan: data.plan,
         });
 
         if (restErr) {
-          console.error("[auth] restaurant insert error:", restErr.message, restErr.code);
-          if (restErr.code === "42501") {
-            return {
-              success: false,
-              error: "خطأ في صلاحيات قاعدة البيانات — تأكد من تشغيل SQL script كاملاً في Supabase",
-            };
-          }
+          console.error("[auth] insert_restaurant RPC error:", restErr.message, restErr.code);
         }
 
         const profile = await buildUserProfile(userId);
