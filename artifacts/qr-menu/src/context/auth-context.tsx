@@ -45,10 +45,10 @@ function translateSupabaseError(message: string): string {
     return "صيغة البريد الإلكتروني غير صحيحة";
   if (message.includes("signup is disabled") || message.includes("Signups not allowed"))
     return "التسجيل مغلق حالياً — تحقق من إعدادات Supabase";
-  if (message.includes("rate limit") || message.includes("too many requests"))
-    return "طلبات كثيرة، يرجى الانتظار دقيقة والمحاولة مجدداً";
-  if (message.includes("fetch") || message.includes("network") || message.includes("Failed to fetch") || message.includes("NetworkError"))
-    return "تعذّر الاتصال بالخادم — تأكد من إعداد VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY";
+  if (message.includes("rate limit") || message.includes("too many requests") || message.includes("429"))
+    return "كثرة المحاولات — انتظر دقيقة ثم أعد المحاولة";
+  if (message.includes("fetch") || message.includes("network") || message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("Load failed"))
+    return "انقطع الاتصال مؤقتاً — تأكد من الإنترنت وأعد المحاولة";
   if (message.includes("Invalid API key") || message.includes("invalid key") || message.includes("apikey"))
     return "مفتاح Supabase غير صحيح — تحقق من VITE_SUPABASE_ANON_KEY";
   return "خطأ: " + message;
