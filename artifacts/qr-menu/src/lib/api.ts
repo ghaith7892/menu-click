@@ -60,7 +60,9 @@ export async function createCategory(restaurantId: string, name: string, icon = 
 }
 
 export async function deleteCategory(id: string) {
-  return supabase.from("categories").delete().eq("id", id);
+  const { error } = await supabase.rpc("delete_category", { p_id: id });
+  if (error) console.error("[api] delete_category:", error.message);
+  return { error };
 }
 
 // ─── Menu Items ─────────────────────────────────────────────
@@ -100,7 +102,9 @@ export async function updateMenuItem(id: string, updates: Partial<MenuItemRow>) 
 }
 
 export async function deleteMenuItem(id: string) {
-  return supabase.from("menu_items").delete().eq("id", id);
+  const { error } = await supabase.rpc("delete_menu_item", { p_id: id });
+  if (error) console.error("[api] delete_menu_item:", error.message);
+  return { error };
 }
 
 // ─── Admin ──────────────────────────────────────────────────
