@@ -122,6 +122,8 @@ function ItemModal({
     reader.readAsDataURL(file);
   };
 
+  const { t } = useLang();
+
   if (!open) return null;
 
   const inputCls = "w-full bg-gray-100 rounded-2xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all";
@@ -379,6 +381,8 @@ function EditItemModal({
     onDelete(item.id);
     onClose();
   };
+
+  const { t } = useLang();
 
   if (!open || !item) return null;
 
