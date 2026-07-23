@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profile.role === "restaurant" && !profile.restaurantId) {
         const pendingKey = "pending_restaurant_" + profile.id;
         const pendingRaw = localStorage.getItem(pendingKey);
-        let restaurantName = profile.name ? "مطعم " + profile.name : "مطعمي";
+        let restaurantName = profile.name ? profile.name : "مطعمي";
         let plan: "free" | "pro" = "free";
 
         if (pendingRaw) {
