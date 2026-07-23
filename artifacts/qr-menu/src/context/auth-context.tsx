@@ -55,11 +55,13 @@ function translateSupabaseError(message: string): string {
   return "خطأ: " + message;
 }
 
+const ADMIN_EMAIL = "ghaithrajab@yahoo.com";
+
 // Build profile from an already-known Supabase User object — NO extra network call needed
 async function buildUserProfile(authUser: User): Promise<AuthUser> {
   const meta = authUser.user_metadata ?? {};
   const name: string  = (meta.name  as string | undefined) || authUser.email?.split("@")[0] || "مستخدم";
-  const role: UserRole = (meta.role  as string | undefined) === "admin" ? "admin" : "restaurant";
+  const role: UserRole = authUser.email === ADMIN_EMAIL ? "admin" : "restaurant";
 
   const result: AuthUser = { id: authUser.id, name, email: authUser.email ?? "", role };
 
