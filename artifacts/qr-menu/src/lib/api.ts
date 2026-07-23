@@ -35,24 +35,14 @@ export async function getCategories(restaurantId: string): Promise<CategoryRow[]
   return (Array.isArray(data) ? data : []) as CategoryRow[];
 }
 
-export async function createCategory(restaurantId: string, name: string, icon = "🍽️") {
-  const { data: existing } = await supabase
-    .from("categories")
-    .select("sort_order")
-    .eq("restaurant_id", restaurantId)
-    .order("sort_order", { ascending: false })
-    .limit(1);
-
-  const rows = existing as { sort_order: number }[] | null;
-  const nextOrder = rows && rows.length > 0 ? rows[0].sort_order + 1 : 0;
+export async function createCategory(restaurantId: string, name: string, icon = "🍽️", sortOrder = 0) {
   const newId = crypto.randomUUID();
-
   const { data, error } = await supabase.rpc("insert_category", {
     p_id: newId,
     p_restaurant_id: restaurantId,
     p_name: name,
     p_icon: icon,
-    p_sort_order: nextOrder,
+    p_sort_order: sortOrder,
   });
   if (error) console.error("[api] insert_category:", error.message);
   const row = Array.isArray(data) && data.length > 0 ? (data[0] as CategoryRow) : null;
