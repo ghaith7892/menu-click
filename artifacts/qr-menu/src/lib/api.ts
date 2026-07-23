@@ -81,13 +81,11 @@ export async function getMenuItemsSlim(restaurantId: string): Promise<MenuItemRo
 
 /** Fetch just the image field for a single item (used when edit modal opens) */
 export async function getMenuItemImage(id: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("menu_items")
-    .select("image")
-    .eq("id", id)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_menu_item_image", {
+    p_item_id: id,
+  });
   if (error) console.error("[api] getMenuItemImage:", error.message);
-  return (data as { image?: string | null } | null)?.image ?? null;
+  return typeof data === "string" ? data : null;
 }
 
 /**
