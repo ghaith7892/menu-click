@@ -94,53 +94,51 @@ export async function deleteMenuItem(id: string) {
   return { error };
 }
 
-// ─── Admin ──────────────────────────────────────────────────
+// ─── Admin (all via SECURITY DEFINER RPCs — no direct table access) ─────────
 export async function getAllRestaurants(): Promise<RestaurantRow[]> {
-  const { data } = await supabase
-    .from("restaurants")
-    .select("*")
-    .order("created_at", { ascending: false });
-  return (data as RestaurantRow[]) ?? [];
+  const { data, error } = await supabase.rpc("admin_get_restaurants");
+  if (error) console.error("[api] admin_get_restaurants:", error.message);
+  return (Array.isArray(data) ? data : []) as RestaurantRow[];
 }
 
 export async function getAllUsers(): Promise<UserRow[]> {
-  const { data } = await supabase
-    .from("users")
-    .select("*")
-    .order("created_at", { ascending: false });
-  return (data as UserRow[]) ?? [];
+  const { data, error } = await supabase.rpc("admin_get_users");
+  if (error) console.error("[api] admin_get_users:", error.message);
+  return (Array.isArray(data) ? data : []) as UserRow[];
 }
 
 export async function updateRestaurantPlan(id: string, plan: RestaurantRow["plan"]) {
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({ plan } as Record<string, unknown>)
-    .eq("id", id)
-    .select()
-    .single();
-  return { data: data as RestaurantRow | null, error };
+  const { data, error } = await supabase.rpc("admin_update_plan", {
+    p_id: id,
+    p_plan: plan,
+  });
+  if (error) console.error("[api] admin_update_plan:", error.message);
+  const row = Array.isArray(data) && data.length > 0 ? (data[0] as RestaurantRow) : null;
+  return { data: row, error };
 }
 
 export async function updateRestaurantActive(id: string, isActive: boolean) {
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({ is_active: isActive } as Record<string, unknown>)
-    .eq("id", id)
-    .select()
-    .single();
-  return { data: data as RestaurantRow | null, error };
+  const { data, error } = await supabase.rpc("admin_update_active", {
+    p_id: id,
+    p_is_active: isActive,
+  });
+  if (error) console.error("[api] admin_update_active:", error.message);
+  const row = Array.isArray(data) && data.length > 0 ? (data[0] as RestaurantRow) : null;
+  return { data: row, error };
 }
 
 export async function deleteRestaurant(id: string) {
-  return supabase.from("restaurants").delete().eq("id", id);
+  const { error } = await supabase.rpc("admin_delete_restaurant", { p_id: id });
+  if (error) console.error("[api] admin_delete_restaurant:", error.message);
+  return { error };
 }
 
 export async function getRestaurantItemCount(restaurantId: string): Promise<number> {
-  const { count } = await supabase
-    .from("menu_items")
-    .select("*", { count: "exact", head: true })
-    .eq("restaurant_id", restaurantId);
-  return count ?? 0;
+  const { data, error } = await supabase.rpc("admin_get_item_count", {
+    p_restaurant_id: restaurantId,
+  });
+  if (error) console.error("[api] admin_get_item_count:", error.message);
+  return typeof data === "number" ? data : 0;
 }
 
 export type { MenuItemExtra };
