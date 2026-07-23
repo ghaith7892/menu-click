@@ -64,19 +64,18 @@ export async function getMenuItems(restaurantId: string): Promise<MenuItemRow[]>
 }
 
 /**
- * Slim fetch — excludes the `image` column so large base64 blobs are NOT
- * transferred. Use this for the dashboard list; load images lazily per-item.
+ * Slim fetch — uses the same RPC as getMenuItems (avoids RLS / PostgREST
+ * permission issues) but strips the image field immediately so large base64
+ * blobs are NOT kept in React state. Images are loaded lazily per-item.
  */
 export async function getMenuItemsSlim(restaurantId: string): Promise<MenuItemRow[]> {
-  const { data, error } = await supabase
-    .from("menu_items")
-    .select("id,restaurant_id,category_id,name,name_en,description,price,is_popular,is_available,extras,sort_order,created_at")
-    .eq("restaurant_id", restaurantId)
-    .order("sort_order", { ascending: true });
+  const { data, error } = await supabase.rpc("get_menu_items_by_restaurant", {
+    p_restaurant_id: restaurantId,
+  });
   if (error) console.error("[api] getMenuItemsSlim:", error.message);
-  // image will be absent from the result — cast as MenuItemRow with image=null
-  return ((Array.isArray(data) ? data : []) as unknown[]).map(
-    (row) => ({ ...(row as object), image: null }) as MenuItemRow
+  // Strip the image field so large base64 blobs are not kept in React state
+  return ((Array.isArray(data) ? data : []) as MenuItemRow[]).map(
+    (row) => ({ ...row, image: null })
   );
 }
 
