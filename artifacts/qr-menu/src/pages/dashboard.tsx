@@ -51,6 +51,7 @@ function ItemModal({
   onAdd: (item: MenuItemRow) => void;
   currencySymbol: string;
 }) {
+  const { t } = useLang();
   const [selectedCat, setSelectedCat] = useState(categories[0]?.id ?? "");
   const [name, setName] = useState("");
   const [unit, setUnit] = useState<UnitType>("g");
@@ -75,8 +76,8 @@ function ItemModal({
   const handleClose = () => { resetForm(); onClose(); };
 
   const handleSubmit = async () => {
-    if (!name.trim()) { setSaveError("يرجى إدخال اسم الصنف"); return; }
-    if (!selectedCat) { setSaveError("يرجى اختيار قسم"); return; }
+    if (!name.trim()) { setSaveError(t.itemNameRequired); return; }
+    if (!selectedCat) { setSaveError(t.itemNameRequired); return; }
     const firstVariation = variations[0];
     const price = parseFloat(firstVariation?.price ?? "0") || 0;
     setSaving(true);
@@ -120,8 +121,6 @@ function ItemModal({
     };
     reader.readAsDataURL(file);
   };
-
-  const { t } = useLang();
 
   if (!open) return null;
 
@@ -318,6 +317,7 @@ function EditItemModal({
   onDelete: (id: string) => void;
   currencySymbol: string;
 }) {
+  const { t } = useLang();
   const [selectedCat, setSelectedCat] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -379,8 +379,6 @@ function EditItemModal({
     onDelete(item.id);
     onClose();
   };
-
-  const { t } = useLang();
 
   if (!open || !item) return null;
 
