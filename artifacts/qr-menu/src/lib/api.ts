@@ -9,12 +9,9 @@ export async function getRestaurantByOwner(ownerId: string): Promise<RestaurantR
 }
 
 export async function getRestaurantById(id: string): Promise<RestaurantRow | null> {
-  const { data } = await supabase
-    .from("restaurants")
-    .select("*")
-    .eq("id", id)
-    .single();
-  return (data as RestaurantRow | null);
+  const { data, error } = await supabase.rpc("get_restaurant_by_id", { p_id: id });
+  if (error) console.error("[api] get_restaurant_by_id:", error.message);
+  return Array.isArray(data) && data.length > 0 ? (data[0] as RestaurantRow) : null;
 }
 
 export async function updateRestaurant(id: string, updates: Partial<RestaurantRow>) {
