@@ -96,7 +96,7 @@ function ItemModal({
       sort_order: 0,
     });
     setSaving(false);
-    if (error || !data) { setSaveError("حدث خطأ أثناء الإضافة، حاول مجدداً"); return; }
+    if (error || !data) { setSaveError(t.addItemError); return; }
     onAdd(data);
     handleClose();
   };
@@ -121,6 +121,8 @@ function ItemModal({
     reader.readAsDataURL(file);
   };
 
+  const { t } = useLang();
+
   if (!open) return null;
 
   const inputCls = "w-full bg-gray-100 rounded-2xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all";
@@ -135,8 +137,8 @@ function ItemModal({
       >
         {/* Header */}
         <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <button className="text-indigo-400 text-sm font-semibold" onClick={handleSubmit}>حفظ</button>
-          <h3 className="font-bold text-gray-900 text-base">صنف جديد</h3>
+          <button className="text-indigo-400 text-sm font-semibold" onClick={handleSubmit}>{t.save}</button>
+          <h3 className="font-bold text-gray-900 text-base">{t.newItem}</h3>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
@@ -162,7 +164,7 @@ function ItemModal({
           <input
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="الاسم"
+            placeholder={t.itemName}
             className={inputCls}
           />
 
@@ -172,7 +174,7 @@ function ItemModal({
               <div className="flex gap-2 items-center">
                 {/* Price */}
                 <div className="flex-1">
-                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، {currencySymbol}</p>}
+                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">{t.price}، {currencySymbol}</p>}
                   <input
                     type="number"
                     value={v.price}
@@ -183,7 +185,7 @@ function ItemModal({
                 </div>
                 {/* Amount */}
                 <div className="flex-1">
-                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">الكمية، {unit === "g" ? "غرام" : "مل"}</p>}
+                  {idx === 0 && <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">{t.quantity}، {unit === "g" ? t.grams : t.mlUnit}</p>}
                   <input
                     type="number"
                     value={v.amount}
@@ -217,7 +219,7 @@ function ItemModal({
               <input
                 value={v.name}
                 onChange={e => updateVariation(v.id, "name", e.target.value)}
-                placeholder={idx === 0 ? "صغير" : "كبير"}
+                placeholder={idx === 0 ? t.smallPlaceholder : t.largePlaceholder}
                 className={inputCls}
               />
             </div>
@@ -228,14 +230,14 @@ function ItemModal({
             onClick={addVariation}
             className="w-full bg-gray-100 rounded-2xl py-3.5 text-sm font-semibold text-indigo-600 hover:bg-gray-200 transition-colors"
           >
-            + إضافة حجم / خيار
+            {t.addVariation}
           </button>
 
           {/* Description */}
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="وصف شهي جداً..."
+            placeholder={t.descriptionPlaceholder}
             rows={3}
             className={inputCls + " resize-none"}
           />
@@ -259,7 +261,7 @@ function ItemModal({
               style={{ border: "2px dashed #6366f1" }}
             >
               <Plus className="w-5 h-5" />
-              <span className="text-xs leading-tight text-center">أضف<br/>صورة</span>
+              <span className="text-xs leading-tight text-center">{t.addPhoto.split("\n")[0]}<br/>{t.addPhoto.split("\n")[1]}</span>
             </button>
           )}
 
@@ -267,15 +269,15 @@ function ItemModal({
           <div className="space-y-3">
             <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-900">إخفاء من المنيو</p>
-                <p className="text-xs text-gray-400 mt-0.5">سيظهر الصنف لك فقط</p>
+                <p className="text-sm font-semibold text-gray-900">{t.hideFromMenu}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{t.hideFromMenuDesc}</p>
               </div>
               <Toggle value={hideFromMenu} onChange={setHideFromMenu} />
             </div>
             <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-900">غير متوفر</p>
-                <p className="text-xs text-gray-400 mt-0.5">سيرى الضيوف أنه سيكون متاحاً لاحقاً</p>
+                <p className="text-sm font-semibold text-gray-900">{t.outOfStock}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{t.outOfStockDesc}</p>
               </div>
               <Toggle value={outOfStock} onChange={setOutOfStock} />
             </div>
@@ -295,7 +297,7 @@ function ItemModal({
             className="w-full py-4 rounded-2xl text-white font-bold text-base mt-2 hover:brightness-110 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
             style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}
           >
-            {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> جارٍ الإضافة...</> : "إضافة"}
+            {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> {t.adding}</> : t.add}
           </button>
           <div className="h-2" />
         </div>
@@ -355,7 +357,7 @@ function EditItemModal({
 
   const handleSave = async () => {
     if (!item) return;
-    if (!name.trim()) { setSaveError("يرجى إدخال اسم الصنف"); return; }
+    if (!name.trim()) { setSaveError(t.itemNameRequired); return; }
     setSaving(true); setSaveError("");
     const { data, error } = await updateMenuItem(item.id, {
       name: name.trim(),
@@ -366,7 +368,7 @@ function EditItemModal({
       is_available: !outOfStock,
     });
     setSaving(false);
-    if (error || !data) { setSaveError("حدث خطأ أثناء الحفظ، حاول مجدداً"); return; }
+    if (error || !data) { setSaveError(t.saveItemError); return; }
     onSave(data);
     onClose();
   };
@@ -377,6 +379,8 @@ function EditItemModal({
     onDelete(item.id);
     onClose();
   };
+
+  const { t } = useLang();
 
   if (!open || !item) return null;
 
@@ -392,8 +396,8 @@ function EditItemModal({
       >
         {/* Header */}
         <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <button className="text-indigo-400 text-sm font-semibold" onClick={handleSave}>حفظ</button>
-          <h3 className="font-bold text-gray-900 text-base">تعديل الصنف</h3>
+          <button className="text-indigo-400 text-sm font-semibold" onClick={handleSave}>{t.save}</button>
+          <h3 className="font-bold text-gray-900 text-base">{t.editItem}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
@@ -416,11 +420,11 @@ function EditItemModal({
           </div>
 
           {/* Name */}
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="الاسم" className={inputCls} />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder={t.itemName} className={inputCls} />
 
           {/* Price */}
           <div>
-            <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">السعر، {currencySymbol}</p>
+            <p className="text-[10px] text-gray-400 font-semibold mb-1 px-1">{t.price}، {currencySymbol}</p>
             <input
               type="number"
               value={price}
@@ -434,7 +438,7 @@ function EditItemModal({
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="وصف شهي جداً..."
+            placeholder={t.descriptionPlaceholder}
             rows={3}
             className={inputCls + " resize-none"}
           />
@@ -458,7 +462,7 @@ function EditItemModal({
               style={{ border: "2px dashed #6366f1" }}
             >
               <Camera className="w-5 h-5" />
-              <span className="text-xs leading-tight text-center">أضف<br/>صورة</span>
+              <span className="text-xs leading-tight text-center">{t.addPhoto.split("\n")[0]}<br/>{t.addPhoto.split("\n")[1]}</span>
             </button>
           )}
 
@@ -466,15 +470,15 @@ function EditItemModal({
           <div className="space-y-3">
             <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-900">إخفاء من المنيو</p>
-                <p className="text-xs text-gray-400 mt-0.5">سيظهر الصنف لك فقط</p>
+                <p className="text-sm font-semibold text-gray-900">{t.hideFromMenu}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{t.hideFromMenuDesc}</p>
               </div>
               <Toggle value={hideFromMenu} onChange={setHideFromMenu} />
             </div>
             <div className="bg-gray-100 rounded-2xl px-4 py-3.5 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-900">غير متوفر</p>
-                <p className="text-xs text-gray-400 mt-0.5">سيرى الضيوف أنه سيكون متاحاً لاحقاً</p>
+                <p className="text-sm font-semibold text-gray-900">{t.outOfStock}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{t.outOfStockDesc}</p>
               </div>
               <Toggle value={outOfStock} onChange={setOutOfStock} />
             </div>
@@ -494,17 +498,17 @@ function EditItemModal({
             className="w-full py-4 rounded-2xl text-white font-bold text-base mt-2 hover:brightness-110 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
             style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}
           >
-            {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> جارٍ الحفظ...</> : "حفظ التعديلات"}
+            {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> {t.saving}</> : t.saveChanges}
           </button>
 
           {/* Delete */}
           {confirmDelete ? (
             <div className="flex gap-3">
               <button onClick={handleDelete} className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-bold text-sm">
-                تأكيد الحذف
+                {t.confirmDeleteLabel}
               </button>
               <button onClick={() => setConfirmDelete(false)} className="flex-1 py-3 rounded-2xl bg-gray-100 text-gray-700 font-bold text-sm">
-                إلغاء
+                {t.cancel}
               </button>
             </div>
           ) : (
@@ -512,7 +516,7 @@ function EditItemModal({
               onClick={() => setConfirmDelete(true)}
               className="w-full py-3 rounded-2xl bg-red-50 text-red-500 font-bold text-sm flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
             >
-              <Trash2 className="w-4 h-4" /> حذف الصنف
+              <Trash2 className="w-4 h-4" /> {t.deleteItem}
             </button>
           )}
 
@@ -583,7 +587,7 @@ export default function DashboardPage() {
   const handleAddCategory = async () => {
     if (!newCatName.trim() || !restaurant) return;
     setAddingCategory(true);
-    const { data } = await createCategory(restaurant.id, newCatName.trim(), newCatIcon);
+    const { data } = await createCategory(restaurant.id, newCatName.trim(), newCatIcon, categories.length);
     setAddingCategory(false);
     if (data) {
       setCategories(prev => [...prev, data as CategoryRow]);
@@ -640,7 +644,7 @@ export default function DashboardPage() {
   /* ── Shared category creation form ── */
   const CategoryForm = showAddCategory ? (
     <div className="bg-white border border-indigo-100 rounded-3xl p-4 mb-4 shadow-sm">
-      <p className="text-sm font-bold text-gray-900 mb-3">إضافة قسم جديد</p>
+      <p className="text-sm font-bold text-gray-900 mb-3">{t.addNewCategoryTitle}</p>
       <div className="flex gap-1.5 flex-wrap mb-3">
         {["🍽️","🍔","🍕","☕","🥗","🍰","🧃","🍣","🌮","🍜"].map(emoji => (
           <button key={emoji} onClick={() => setNewCatIcon(emoji)}
@@ -652,12 +656,12 @@ export default function DashboardPage() {
       <div className="flex gap-2">
         <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleAddCategory()}
-          placeholder="اسم القسم"
+          placeholder={t.categoryNamePlaceholder}
           className="flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
         <button onClick={handleAddCategory} disabled={!newCatName.trim() || addingCategory}
           className="px-4 py-2.5 rounded-2xl text-white text-sm font-bold disabled:opacity-50 flex items-center gap-1"
           style={primaryStyle}>
-          {addingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> إضافة</>}
+          {addingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> {t.add}</>}
         </button>
         <button onClick={() => { setShowAddCategory(false); setNewCatName(""); }}
           className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-500">
@@ -669,7 +673,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-white font-sans" dir={dir}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); .font-sans { font-family: 'Cairo', sans-serif; } ::-webkit-scrollbar{display:none}`}</style>
+      <style>{`@import url('${t.fontUrl}'); .font-sans { font-family: ${t.fontFamily}; } ::-webkit-scrollbar{display:none}`}</style>
 
       {/* ── Top bar ── */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between">
@@ -729,7 +733,7 @@ export default function DashboardPage() {
               )}
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-2xl px-4 py-2 flex items-center gap-2 text-sm font-semibold text-gray-800">
-                  {coverSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ الرفع...</> : <><Camera className="w-4 h-4" /> تغيير الغلاف</>}
+                  {coverSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> {t.uploadingCover}</> : <><Camera className="w-4 h-4" /> {t.changeCover}</>}
                 </div>
               </div>
             </div>
@@ -750,7 +754,7 @@ export default function DashboardPage() {
               <button onClick={() => setShowAddCategory(true)}
                 className="flex-shrink-0 flex items-center gap-1 px-4 py-2 rounded-full text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-all"
                 style={{ border: "2px dashed #6366f1" }}>
-                <Plus className="w-3.5 h-3.5" /> + add category
+                <Plus className="w-3.5 h-3.5" /> {t.newCategory}
               </button>
             </div>
 
@@ -787,12 +791,12 @@ export default function DashboardPage() {
                           </div>
                           {!item.is_available && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                              <span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded-full">غير متوفر</span>
+                              <span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded-full">{t.outOfStock}</span>
                             </div>
                           )}
                         </div>
                         <div className="p-3">
-                          <p className="text-sm font-black text-gray-900">من {item.price} {getCurrencySymbol(restaurant?.currency)}</p>
+                          <p className="text-sm font-black text-gray-900">{t.fromPrice} {item.price} {getCurrencySymbol(restaurant?.currency)}</p>
                           <p className="text-sm text-gray-600 mt-0.5 truncate">{item.name}</p>
                           {item.description && (
                             <p className="text-xs text-gray-400 mt-1 truncate">{item.description}</p>
@@ -806,7 +810,7 @@ export default function DashboardPage() {
                       className="rounded-3xl flex flex-col items-center justify-center gap-2 text-indigo-600 font-semibold text-sm hover:bg-indigo-50 transition-colors"
                       style={{ minHeight: 200, border: "2px dashed #6366f1" }}>
                       <Plus className="w-7 h-7" />
-                      <span>add item</span>
+                      <span>{t.addItemCard}</span>
                     </button>
                   </div>
                 </div>
@@ -820,7 +824,7 @@ export default function DashboardPage() {
                   className="w-full rounded-3xl flex flex-col items-center justify-center gap-3 py-16 text-indigo-600 font-semibold"
                   style={{ border: "2px dashed #6366f1" }}>
                   <Plus className="w-8 h-8" />
-                  <span>أضف قسماً للبدء</span>
+                  <span>{t.addCategoryToStart}</span>
                 </button>
               </div>
             )}
@@ -883,9 +887,9 @@ export default function DashboardPage() {
 
             <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <p className="font-bold text-gray-900 text-sm">حالة المنيو</p>
+                <p className="font-bold text-gray-900 text-sm">{t.menuStatus}</p>
                 <span className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-3 py-1.5 rounded-full border border-green-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> نشط
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> {t.active}
                 </span>
               </div>
               <div className="flex items-center gap-3">
@@ -894,11 +898,11 @@ export default function DashboardPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-sm text-gray-900 truncate">{restaurant?.name ?? "—"}</p>
-                  <p className="text-xs text-gray-400">{menuItems.length} صنف • {categories.length} قسم</p>
+                  <p className="text-xs text-gray-400">{menuItems.length} {t.itemsCount} • {categories.length} {t.categoriesCountLabel}</p>
                 </div>
                 <Link href={restaurant ? `/menu/${restaurant.id}` : "#"}>
                   <button className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 border border-indigo-200 px-3 py-2 rounded-xl hover:bg-indigo-50 transition-colors">
-                    <Eye className="w-3.5 h-3.5" /> معاينة
+                    <Eye className="w-3.5 h-3.5" /> {t.previewBtn}
                   </button>
                 </Link>
               </div>
@@ -989,10 +993,10 @@ export default function DashboardPage() {
               </div>
               <div className="p-5 space-y-3">
                 {[
-                  { label: lang === "ar" ? "الاسم" : "Name", value: restaurant?.name ?? "—" },
-                  { label: lang === "ar" ? "الباقة" : "Plan", value: planLabel(restaurant?.plan) },
-                  { label: lang === "ar" ? "عدد الأصناف" : "Items", value: String(menuItems.length) },
-                  { label: lang === "ar" ? "عدد الأقسام" : "Categories", value: String(categories.length) },
+                  { label: t.nameLabel, value: restaurant?.name ?? "—" },
+                  { label: t.planLabelKey, value: planLabel(restaurant?.plan) },
+                  { label: t.itemsLabel, value: String(menuItems.length) },
+                  { label: t.categoriesLabel, value: String(categories.length) },
                 ].map((row, i) => (
                   <div key={i} className="flex justify-between items-center text-sm py-1">
                     <span className="text-gray-400">{row.label}</span>
@@ -1015,7 +1019,7 @@ export default function DashboardPage() {
             <button className="flex items-center gap-2.5 font-bold text-sm px-6 py-3.5 rounded-full shadow-xl hover:shadow-2xl transition-all"
               style={{ background: "#ffe8d4", color: "#c2440b" }}>
               <Eye className="w-4 h-4" />
-              preview
+              {t.previewMenu}
             </button>
           </Link>
         </div>
