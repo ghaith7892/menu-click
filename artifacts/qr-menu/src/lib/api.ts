@@ -53,12 +53,68 @@ export async function deleteCategory(id: string) {
 }
 
 // ─── Menu Items ─────────────────────────────────────────────
+
+/** Full fetch (includes base64 images) — use only when you need images */
 export async function getMenuItems(restaurantId: string): Promise<MenuItemRow[]> {
   const { data, error } = await supabase.rpc("get_menu_items_by_restaurant", {
     p_restaurant_id: restaurantId,
   });
   if (error) console.error("[api] get_menu_items_by_restaurant:", error.message);
   return (Array.isArray(data) ? data : []) as MenuItemRow[];
+}
+
+/**
+ * Slim fetch — excludes the `image` column so large base64 blobs are NOT
+ * transferred. Use this for the dashboard list; load images lazily per-item.
+ */
+export async function getMenuItemsSlim(restaurantId: string): Promise<MenuItemRow[]> {
+  const { data, error } = await supabase
+    .from("menu_items")
+    .select("id,restaurant_id,category_id,name,name_en,description,price,is_popular,is_available,extras,sort_order,created_at")
+    .eq("restaurant_id", restaurantId)
+    .order("sort_order", { ascending: true });
+  if (error) console.error("[api] getMenuItemsSlim:", error.message);
+  // image will be absent from the result — cast as MenuItemRow with image=null
+  return ((Array.isArray(data) ? data : []) as unknown[]).map(
+    (row) => ({ ...(row as object), image: null }) as MenuItemRow
+  );
+}
+
+/** Fetch just the image field for a single item (used when edit modal opens) */
+export async function getMenuItemImage(id: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("menu_items")
+    .select("image")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) console.error("[api] getMenuItemImage:", error.message);
+  return (data as { image?: string | null } | null)?.image ?? null;
+}
+
+/**
+ * Upload an image file to Supabase Storage and return its public URL.
+ * Falls back to base64 data URL if upload fails.
+ */
+export async function uploadMenuImage(
+  file: File,
+  restaurantId: string
+): Promise<string> {
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${restaurantId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from("menu-images")
+    .upload(path, file, { upsert: true });
+  if (error) {
+    console.error("[api] uploadMenuImage:", error.message);
+    // Fallback: convert to base64 so the upload still works
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+  const { data: urlData } = supabase.storage.from("menu-images").getPublicUrl(path);
+  return urlData.publicUrl;
 }
 
 export async function createMenuItem(item: Omit<MenuItemRow, "created_at">) {

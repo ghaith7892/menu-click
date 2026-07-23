@@ -9,9 +9,9 @@ import {
 } from "lucide-react";
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
-  getRestaurantByOwner, getCategories, getMenuItems,
+  getRestaurantByOwner, getCategories, getMenuItemsSlim, getMenuItemImage,
   deleteMenuItem, createMenuItem, updateMenuItem,
-  createCategory, updateRestaurant
+  createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
 import { CURRENCIES, getCurrencySymbol } from "@/lib/currencies";
 import { Link, useLocation } from "wouter";
@@ -111,15 +111,13 @@ function ItemModal({
   const updateVariation = (id: string, field: keyof Variation, val: string) =>
     setVariations(v => v.map(x => x.id === id ? { ...x, [field]: val } : x));
 
-  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result;
-      if (typeof result === "string") setPhoto(result);
-    };
-    reader.readAsDataURL(file);
+    setSaving(true);
+    const url = await uploadMenuImage(file, restaurantId);
+    setPhoto(url);
+    setSaving(false);
   };
 
   if (!open) return null;
@@ -336,23 +334,32 @@ function EditItemModal({
       setName(item.name ?? "");
       setDescription(item.description ?? "");
       setPrice(String(item.price ?? ""));
-      setPhoto(item.image?.startsWith("data:") || item.image?.startsWith("http") ? item.image : null);
-      setHideFromMenu(item.is_available === false && !item.is_popular);
-      setOutOfStock(item.is_available === false);
       setSaveError("");
       setConfirmDelete(false);
+      setHideFromMenu(item.is_available === false && !item.is_popular);
+      setOutOfStock(item.is_available === false);
+
+      // If image already in item state (e.g. newly added), use it.
+      // Otherwise lazy-fetch — avoids loading base64 blobs on the list view.
+      if (item.image) {
+        setPhoto(item.image);
+      } else {
+        setPhoto(null);
+        // Fetch the single image column asynchronously so modal opens instantly
+        getMenuItemImage(item.id).then((img) => {
+          if (img) setPhoto(img);
+        });
+      }
     }
   }, [item, categories]);
 
-  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result;
-      if (typeof result === "string") setPhoto(result);
-    };
-    reader.readAsDataURL(file);
+    if (!file || !item) return;
+    setSaving(true);
+    const url = await uploadMenuImage(file, item.restaurant_id);
+    setPhoto(url);
+    setSaving(false);
   };
 
   const handleSave = async () => {
@@ -562,7 +569,7 @@ export default function DashboardPage() {
       if (rest) {
         const [cats, items] = await Promise.all([
           getCategories(rest.id),
-          getMenuItems(rest.id),
+          getMenuItemsSlim(rest.id),   // images excluded → fast initial load
         ]);
         setCategories(cats);
         setMenuItems(items);
