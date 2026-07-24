@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
-  getRestaurantByOwner, getCategories, getMenuItemsSlim, getMenuItemImage,
+  getRestaurantByOwner, getCategories, getMenuItems, getMenuItemsSlim, getMenuItemImage,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
@@ -567,15 +567,23 @@ export default function DashboardPage() {
       const rest = await getRestaurantByOwner(user.id);
       setRestaurant(rest);
       if (rest) {
-        const [cats, items] = await Promise.all([
+        // Phase 1: slim load (no images) — items appear instantly
+        const [cats, slimItems] = await Promise.all([
           getCategories(rest.id),
-          getMenuItemsSlim(rest.id),   // images excluded → fast initial load
+          getMenuItemsSlim(rest.id),
         ]);
         setCategories(cats);
-        setMenuItems(items);
+        setMenuItems(slimItems);
         if (rest.language && rest.language !== lang) {
           setLang(rest.language);
         }
+        setDataLoading(false);
+
+        // Phase 2: load full items with images in background — updates cards silently
+        getMenuItems(rest.id).then((fullItems) => {
+          setMenuItems(fullItems);
+        });
+        return; // skip the setDataLoading(false) below
       }
       setDataLoading(false);
     })();
