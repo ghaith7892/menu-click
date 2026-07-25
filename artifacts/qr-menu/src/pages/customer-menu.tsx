@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
-import { getRestaurantById, getCategories, getMenuItemsNoImage, getMenuItems } from "@/lib/api";
+import { getRestaurantById, getCategories, getMenuItemsNoImage, getMenuItemImage } from "@/lib/api";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const customerT = {
@@ -32,6 +32,66 @@ const customerT = {
   },
 } as const;
 
+/* ─── Per-item image loader ──────────────────────────────────────────────────
+ * Each card fetches its own image independently.
+ * - Storage URLs (https://…) → tiny string, browser loads instantly
+ * - Base64 images            → fetched one at a time, small individual requests
+ * This is far faster than loading ALL images in one huge JSON payload.
+ * Uses IntersectionObserver so off-screen items don't waste bandwidth.
+ * --------------------------------------------------------------------------- */
+function ItemImage({
+  itemId,
+  preloadedSrc,
+  className,
+  placeholder = "🍽️",
+}: {
+  itemId: string;
+  preloadedSrc?: string | null;
+  className: string;
+  placeholder?: string;
+}) {
+  const [src, setSrc] = useState<string | null>(preloadedSrc ?? null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // If already have image (e.g. Storage URL from initial load), skip fetch
+    if (src) return;
+
+    let cancelled = false;
+    const el = ref.current;
+    if (!el) return;
+
+    // Use IntersectionObserver: only fetch when card enters viewport
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          observer.disconnect();
+          getMenuItemImage(itemId).then((img) => {
+            if (!cancelled && img) setSrc(img);
+          });
+        }
+      },
+      { rootMargin: "200px" } // start loading 200px before entering viewport
+    );
+    observer.observe(el);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [itemId, src]);
+
+  return (
+    <div ref={ref} className={className}>
+      {src ? (
+        <img src={src} className="w-full h-full object-cover" loading="lazy" />
+      ) : (
+        <span className="text-4xl">{placeholder}</span>
+      )}
+    </div>
+  );
+}
+
 export default function CustomerMenuPage() {
   const params = useParams<{ restaurantId: string }>();
   const restaurantId = params.restaurantId;
@@ -49,8 +109,7 @@ export default function CustomerMenuPage() {
     if (!restaurantId) return;
     (async () => {
       setDataLoading(true);
-
-      // Phase 1: restaurant + categories + items WITHOUT images — small payload, renders fast
+      // Load everything except images — fast, small payload
       const [rest, cats, items] = await Promise.all([
         getRestaurantById(restaurantId),
         getCategories(restaurantId),
@@ -59,24 +118,8 @@ export default function CustomerMenuPage() {
       setRestaurant(rest);
       setCategories(cats);
       setMenuItems(items);
-      setDataLoading(false); // ← show menu immediately, no waiting for images
-
-      // Phase 2: load full items (with images) in background, then merge images into state
-      if (items.length > 0) {
-        getMenuItems(restaurantId).then(fullItems => {
-          const imageMap: Record<string, string> = {};
-          for (const fi of fullItems) {
-            if (fi.id && fi.image) imageMap[fi.id] = fi.image;
-          }
-          if (Object.keys(imageMap).length > 0) {
-            setMenuItems(prev =>
-              prev.map(item =>
-                imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
-              )
-            );
-          }
-        });
-      }
+      setDataLoading(false);
+      // Images load per-card via ItemImage (IntersectionObserver)
     })();
   }, [restaurantId]);
 
@@ -194,12 +237,12 @@ export default function CustomerMenuPage() {
               onClick={() => setSelectedItem(item)}
               className={`w-full bg-white rounded-2xl p-4 flex gap-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow ${cdir === "rtl" ? "text-right" : "text-left"}`}
             >
-              <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center text-4xl shrink-0 overflow-hidden">
-                {item.image?.startsWith("data:") || item.image?.startsWith("http")
-                  ? <img src={item.image} className="w-full h-full object-cover" />
-                  : <span>{item.image ?? "🍽️"}</span>
-                }
-              </div>
+              {/* Image — loads independently, doesn't block item render */}
+              <ItemImage
+                itemId={item.id}
+                preloadedSrc={item.image}
+                className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-1 mb-1">
                   <p className="font-bold text-sm text-gray-900 leading-snug flex-1">{item.name}</p>
@@ -217,7 +260,7 @@ export default function CustomerMenuPage() {
         )}
       </div>
 
-      {/* ── Item detail bottom sheet (view only) ── */}
+      {/* ── Item detail bottom sheet ── */}
       {selectedItem && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
@@ -227,18 +270,17 @@ export default function CustomerMenuPage() {
             className="bg-white w-full rounded-t-3xl max-h-[80vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            {/* Handle */}
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
 
-            {/* Image */}
-            <div className="mx-4 mt-2 mb-4 h-48 bg-gray-100 rounded-3xl flex items-center justify-center text-7xl overflow-hidden">
-              {selectedItem.image?.startsWith("data:") || selectedItem.image?.startsWith("http")
-                ? <img src={selectedItem.image} className="w-full h-full object-cover" />
-                : <span>{selectedItem.image ?? "🍽️"}</span>
-              }
-            </div>
+            {/* Image in detail sheet — always loads since user explicitly opened it */}
+            <ItemImage
+              itemId={selectedItem.id}
+              preloadedSrc={selectedItem.image}
+              className="mx-4 mt-2 mb-4 h-48 bg-gray-100 rounded-3xl flex items-center justify-center overflow-hidden"
+              placeholder="🍽️"
+            />
 
             <div className="px-5 pb-8 space-y-3">
               <div className="flex items-start justify-between gap-3">

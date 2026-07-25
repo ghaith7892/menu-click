@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import {
   UtensilsCrossed, QrCode,
@@ -10,7 +10,7 @@ import {
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
   getRestaurantByOwner, getRestaurantById, getCategories,
-  getMenuItemsNoImage, getMenuItemImage, getMenuItems,
+  getMenuItemsNoImage, getMenuItemImage,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
@@ -28,6 +28,47 @@ interface Variation {
   price: string;
   amount: string;
 }
+
+/* ─── Per-item image loader ───────────────────────── */
+const ItemImage = memo(function ItemImage({
+  itemId,
+  preloadedSrc,
+}: {
+  itemId: string;
+  preloadedSrc?: string | null;
+}) {
+  const [src, setSrc] = useState<string | null>(preloadedSrc ?? null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (src) return;
+    let cancelled = false;
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          observer.disconnect();
+          getMenuItemImage(itemId).then(img => {
+            if (!cancelled && img) setSrc(img);
+          });
+        }
+      },
+      { rootMargin: "300px" }
+    );
+    observer.observe(el);
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [itemId, src]);
+
+  return (
+    <div ref={ref} className="w-full h-full flex items-center justify-center">
+      {src
+        ? <img src={src} className="w-full h-full object-cover" loading="lazy" />
+        : <span className="text-4xl">🍽️</span>
+      }
+    </div>
+  );
+});
 
 /* ─── Toggle Switch ───────────────────────────────── */
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -595,22 +636,6 @@ export default function DashboardPage() {
         setMenuItems(items);
         if (rest.language && rest.language !== lang) setLang(rest.language);
         setDataLoading(false);
-
-        // Phase 2: ONE batch RPC → all (id, image) pairs → merge into state
-        // Single request, much smaller than full-item bulk load
-        getMenuItems(rest.id).then(fullItems => {
-          const imageMap: Record<string, string> = {};
-          for (const fi of fullItems) {
-            if (fi.id && fi.image) imageMap[fi.id] = fi.image;
-          }
-          if (Object.keys(imageMap).length > 0) {
-            setMenuItems(prev =>
-              prev.map(item =>
-                imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
-              )
-            );
-          }
-        });
         return;
       }
       setDataLoading(false);
@@ -822,11 +847,8 @@ export default function DashboardPage() {
                       <div key={item.id}
                         onClick={() => setEditingItem(item)}
                         className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group hover:shadow-md transition-all cursor-pointer">
-                        <div className="relative h-36 bg-gray-100 flex items-center justify-center overflow-hidden">
-                          {item.image
-                            ? <img src={item.image} className="w-full h-full object-cover" loading="lazy" />
-                            : <span className="text-4xl">🍽️</span>
-                          }
+                        <div className="relative h-36 bg-gray-100 overflow-hidden">
+                          <ItemImage itemId={item.id} preloadedSrc={item.image} />
                           <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow">
                             <Pencil className="w-3.5 h-3.5" />
                           </div>
