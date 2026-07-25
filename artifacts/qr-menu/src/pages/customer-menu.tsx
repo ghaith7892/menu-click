@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
-import { getRestaurantById, getCategories, getMenuItems } from "@/lib/api";
+import { getRestaurantById, getCategories, getMenuItemsNoImage, getMenuItemImagesBatch } from "@/lib/api";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const customerT = {
@@ -49,15 +49,29 @@ export default function CustomerMenuPage() {
     if (!restaurantId) return;
     (async () => {
       setDataLoading(true);
+
+      // Phase 1: restaurant + categories + items WITHOUT images — small payload, renders fast
       const [rest, cats, items] = await Promise.all([
         getRestaurantById(restaurantId),
         getCategories(restaurantId),
-        getMenuItems(restaurantId),
+        getMenuItemsNoImage(restaurantId),
       ]);
       setRestaurant(rest);
       setCategories(cats);
       setMenuItems(items);
-      setDataLoading(false);
+      setDataLoading(false); // ← show menu immediately, no waiting for images
+
+      // Phase 2: ONE batch request for all (id, image) pairs — loads in background
+      if (items.length > 0) {
+        getMenuItemImagesBatch(restaurantId).then(imageMap => {
+          if (Object.keys(imageMap).length === 0) return;
+          setMenuItems(prev =>
+            prev.map(item =>
+              imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
+            )
+          );
+        });
+      }
     })();
   }, [restaurantId]);
 
