@@ -108,13 +108,39 @@ export async function getMenuItems(restaurantId: string): Promise<MenuItemRow[]>
   return (Array.isArray(data) ? data : []) as MenuItemRow[];
 }
 
-/** Fetch just the image for a single item — used for lazy card images & edit modal */
+/** Fetch just the image for a single item — used for the edit modal */
 export async function getMenuItemImage(id: string): Promise<string | null> {
   const done = t0(`get_menu_item_image(${id.slice(0, 8)})`);
   const { data, error } = await supabase.rpc("get_menu_item_image", { p_item_id: id });
   done();
   if (error) console.error("[api] getMenuItemImage:", error.message);
   return typeof data === "string" ? data : null;
+}
+
+/**
+ * Batch fetch: ONE RPC returns all (id, image) pairs for a restaurant.
+ * Use this instead of N per-item getMenuItemImage calls.
+ * Requires get_menu_item_images_batch RPC (see batch-images-rpc.sql).
+ */
+export async function getMenuItemImagesBatch(
+  restaurantId: string
+): Promise<Record<string, string>> {
+  const done = t0("get_menu_item_images_batch");
+  const { data, error } = await supabase.rpc("get_menu_item_images_batch", {
+    p_restaurant_id: restaurantId,
+  });
+  done();
+  if (error) {
+    console.error("[api] get_menu_item_images_batch:", error.message);
+    return {};
+  }
+  const map: Record<string, string> = {};
+  if (Array.isArray(data)) {
+    for (const row of data as { id: string; image: string | null }[]) {
+      if (row.id && row.image) map[row.id] = row.image;
+    }
+  }
+  return map;
 }
 
 /**

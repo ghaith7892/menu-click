@@ -10,7 +10,7 @@ import {
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
   getRestaurantByOwner, getRestaurantById, getCategories,
-  getMenuItemsNoImage, getMenuItemImage,
+  getMenuItemsNoImage, getMenuItemImage, getMenuItemImagesBatch,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
@@ -27,34 +27,6 @@ interface Variation {
   name: string;
   price: string;
   amount: string;
-}
-
-/* ─── Lazy Item Image ─────────────────────────────── */
-/**
- * Fetches one item's image on mount via a small per-item RPC call.
- * This replaces the old Phase-2 bulk load (all images at once) which sent
- * a multi-MB JSON payload and caused ~1-minute delays.
- * Storage URLs (http…) are shown directly — browser handles them natively.
- * Base64 images (data:…) are fetched lazily only when this card renders.
- */
-function LazyItemImage({ itemId, className }: { itemId: string; className: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    getMenuItemImage(itemId).then(img => {
-      if (!cancelled && img) setSrc(img);
-    });
-    return () => { cancelled = true; };
-  }, [itemId]);
-
-  if (!src) {
-    return (
-      <div className={`${className} flex items-center justify-center`}>
-        <span className="text-4xl">🍽️</span>
-      </div>
-    );
-  }
-  return <img src={src} className={`${className} object-cover`} />;
 }
 
 /* ─── Toggle Switch ───────────────────────────────── */
@@ -612,17 +584,29 @@ export default function DashboardPage() {
 
       setRestaurant(rest);
       if (rest) {
-        // Load categories + items (no images) in parallel — fast, small payload
+        // Phase 1: categories + items without images — small payload, fast render
         const t1 = performance.now();
         const [cats, items] = await Promise.all([
           getCategories(rest.id),
           getMenuItemsNoImage(rest.id),
         ]);
         console.debug(`[dashboard] cats+items in ${(performance.now() - t1) | 0}ms`);
-
         setCategories(cats);
         setMenuItems(items);
         if (rest.language && rest.language !== lang) setLang(rest.language);
+        setDataLoading(false);
+
+        // Phase 2: ONE batch RPC → all (id, image) pairs → merge into state
+        // Single request, much smaller than full-item bulk load
+        getMenuItemImagesBatch(rest.id).then(imageMap => {
+          if (Object.keys(imageMap).length === 0) return;
+          setMenuItems(prev =>
+            prev.map(item =>
+              imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
+            )
+          );
+        });
+        return;
       }
       setDataLoading(false);
     })();
@@ -833,8 +817,11 @@ export default function DashboardPage() {
                       <div key={item.id}
                         onClick={() => setEditingItem(item)}
                         className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group hover:shadow-md transition-all cursor-pointer">
-                        <div className="relative h-36 bg-gray-100 flex items-center justify-center text-4xl overflow-hidden">
-                          <LazyItemImage itemId={item.id} className="w-full h-full" />
+                        <div className="relative h-36 bg-gray-100 flex items-center justify-center overflow-hidden">
+                          {item.image
+                            ? <img src={item.image} className="w-full h-full object-cover" loading="lazy" />
+                            : <span className="text-4xl">🍽️</span>
+                          }
                           <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow">
                             <Pencil className="w-3.5 h-3.5" />
                           </div>
