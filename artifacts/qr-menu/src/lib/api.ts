@@ -130,17 +130,24 @@ export async function getMenuItemImagesBatch(
     p_restaurant_id: restaurantId,
   });
   done();
-  if (error) {
-    console.error("[api] get_menu_item_images_batch:", error.message);
-    return {};
-  }
-  const map: Record<string, string> = {};
-  if (Array.isArray(data)) {
+
+  if (!error && Array.isArray(data)) {
+    const map: Record<string, string> = {};
     for (const row of data as { id: string; image: string | null }[]) {
       if (row.id && row.image) map[row.id] = row.image;
     }
+    return map;
   }
-  return map;
+
+  // Fallback: batch RPC not available (schema cache not refreshed) —
+  // load full items and extract images. Slower but always works.
+  console.warn("[api] get_menu_item_images_batch unavailable, falling back to full RPC:", error?.message);
+  const items = await getMenuItems(restaurantId);
+  const fallbackMap: Record<string, string> = {};
+  for (const item of items) {
+    if (item.id && item.image) fallbackMap[item.id] = item.image;
+  }
+  return fallbackMap;
 }
 
 /**
