@@ -571,6 +571,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user?.id) return;
+    // ── Fire image load IMMEDIATELY — parallel with restaurant/item fetches ──
+    // Cache hit: resolves in <1ms. Cache miss: ~600ms parallel to ~800ms Phase 1.
+    const imagesPromise = user.restaurantId ? loadAllImages(user.restaurantId) : null;
+
     (async () => {
       setDataLoading(true);
       const t0 = performance.now();
@@ -609,12 +613,12 @@ export default function DashboardPage() {
         if (Object.keys(phase1).length > 0) setImageMap(phase1);
         setDataLoading(false);
 
-        // Phase 2: one batch call for remaining (base64) images — cached 5 min
-        if (items.some(i => !i.image)) {
-          loadAllImages(rest.id).then(all => {
-            if (Object.keys(all).length > 0) setImageMap(all);
-          });
-        }
+        // Await the already-running imagesPromise (started before Phase 1)
+        // or start one now if we didn't have restaurantId from auth
+        const ip = imagesPromise ?? loadAllImages(rest.id);
+        ip.then(all => {
+          if (Object.keys(all).length > 0) setImageMap(all);
+        });
         return;
       }
       setDataLoading(false);

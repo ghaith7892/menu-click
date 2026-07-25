@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
-import { getRestaurantById, getCategories, getMenuItemsNoImage, loadAllImages } from "@/lib/api";
+import { getRestaurantById, getCategories, getMenuItemsNoImage, loadAllImages, transformImageUrl } from "@/lib/api";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const customerT = {
@@ -32,24 +32,36 @@ const customerT = {
   },
 } as const;
 
-/* ─── Lazy image with fade-in ────────────────────────────────────────────────
- * For Storage URL images: src is already in props → renders immediately.
- * For base64/null images:  src arrives later (from Phase 2 batch) → fades in.
- * Uses native loading="lazy" — the browser handles viewport detection natively,
- * which is faster and more memory-efficient than IntersectionObserver per item.
+/* ─── MenuImage ───────────────────────────────────────────────────────────────
+ * priority=true  → fetchPriority="high" + loading="eager"  (first 3 items)
+ * priority=false → fetchPriority="low"  + loading="lazy"   (everything else)
+ *
+ * Supabase Storage URLs are automatically transformed to a resized WebP variant
+ * (160×160 for cards, 800px-wide for the detail sheet) so the browser downloads
+ * a fraction of the original file size.
  * --------------------------------------------------------------------------- */
 function MenuImage({
   src,
   alt,
   className,
+  priority = false,
+  transformWidth = 160,
+  transformHeight = 160,
 }: {
   src: string | null | undefined;
   alt: string;
   className: string;
+  priority?: boolean;
+  transformWidth?: number;
+  transformHeight?: number;
 }) {
   const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
 
-  if (!src) {
+  // Transform Supabase Storage URLs → smaller WebP; base64 passes through unchanged
+  const displaySrc = errored ? src : (transformImageUrl(src, transformWidth, transformHeight) ?? src);
+
+  if (!displaySrc) {
     return (
       <div className={`${className} bg-gray-100 flex items-center justify-center`}>
         <span className="text-3xl">🍽️</span>
@@ -60,12 +72,15 @@ function MenuImage({
   return (
     <div className={`${className} bg-gray-100 overflow-hidden relative`}>
       <img
-        src={src}
+        src={displaySrc}
         alt={alt}
-        loading="lazy"
-        decoding="async"
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        {...({ fetchPriority: priority ? "high" : "low" } as any)}
+        loading={priority ? "eager" : "lazy"}
+        decoding={priority ? "sync" : "async"}
         onLoad={() => setLoaded(true)}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+        onError={() => { if (!errored) setErrored(true); }} // retry with original if transform 404s
+        className={`w-full h-full object-cover transition-opacity duration-200 ${loaded ? "opacity-100" : "opacity-0"}`}
       />
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -88,52 +103,51 @@ export default function CustomerMenuPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  // Separate image state so image updates don't re-render the whole list structure
   const [imageMap, setImageMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!restaurantId) return;
     let cancelled = false;
+
+    // ── Fire image load IMMEDIATELY — runs in parallel with Phase 1 ──────────
+    // Cache hit (5-min TTL): resolves in <1ms → images ready before menu renders
+    // Cache miss: races with Phase 1 (~600ms vs ~800ms) → images often win
+    const imagesPromise = loadAllImages(restaurantId);
+
     (async () => {
       setDataLoading(true);
 
-      // ── Phase 1: text + metadata + Storage URLs ──────────────────────────
-      // Payload is tiny (a few KB). Updated RPC returns Storage URLs but skips
-      // base64 blobs. Storage URL items get images here — no Phase 2 needed.
+      // ── Phase 1: restaurant + categories + items (no image blobs) ────────
       const [rest, cats, items] = await Promise.all([
         getRestaurantById(restaurantId),
         getCategories(restaurantId),
-        getMenuItemsNoImage(restaurantId), // now returns Storage URLs inline
+        getMenuItemsNoImage(restaurantId),
       ]);
       if (cancelled) return;
+
       setRestaurant(rest);
       setCategories(cats);
       setMenuItems(items);
 
-      // Seed imageMap with any Storage URLs already in Phase 1 data
-      const phase1Images: Record<string, string> = {};
+      // Seed imageMap immediately with any Storage URLs from Phase 1
+      const phase1: Record<string, string> = {};
       for (const item of items) {
-        if (item.image) phase1Images[item.id] = item.image;
+        if (item.image) phase1[item.id] = item.image;
       }
-      if (Object.keys(phase1Images).length > 0) setImageMap(phase1Images);
+      if (Object.keys(phase1).length > 0) setImageMap(phase1);
       setDataLoading(false);
 
-      // ── Phase 2: batch-load remaining (base64) images ────────────────────
-      // Single network request for ALL missing images.
-      // loadAllImages() has a 5-minute module-level cache — repeat QR scans
-      // within the same browser session return instantly from memory.
-      if (items.some(i => !i.image)) {
-        loadAllImages(restaurantId).then(all => {
-          if (!cancelled && Object.keys(all).length > 0) {
-            setImageMap(all); // merge replaces map — includes phase1 URLs too
-          }
-        });
-      }
+      // ── Await the already-running image promise ───────────────────────────
+      // By now it may already be resolved (cache hit or fast network).
+      // Even if not, it started in parallel so it's ~800ms closer to done.
+      imagesPromise.then(all => {
+        if (!cancelled && Object.keys(all).length > 0) setImageMap(all);
+      });
     })();
+
     return () => { cancelled = true; };
   }, [restaurantId]);
 
-  // selectedItem tracks the full item; keep its image in sync when imageMap updates
   const selectedItemWithImage = selectedItem
     ? { ...selectedItem, image: imageMap[selectedItem.id] ?? selectedItem.image }
     : null;
@@ -241,17 +255,20 @@ export default function CustomerMenuPage() {
             <p className="text-gray-400 text-sm">{ct.noItems}</p>
           </div>
         ) : (
-          filteredItems.map(item => (
+          filteredItems.map((item, index) => (
             <button
               key={item.id}
               onClick={() => setSelectedItem(item)}
               className={`w-full bg-white rounded-2xl p-4 flex gap-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow ${cdir === "rtl" ? "text-right" : "text-left"}`}
             >
-              {/* Image: Storage URLs render immediately; base64 fades in from Phase 2 */}
+              {/* First 3 items: eager + high priority. Rest: lazy + low priority. */}
               <MenuImage
                 src={imageMap[item.id] ?? item.image}
                 alt={item.name}
                 className="w-20 h-20 rounded-xl shrink-0"
+                priority={index < 3}
+                transformWidth={160}
+                transformHeight={160}
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-1 mb-1">
@@ -283,10 +300,14 @@ export default function CustomerMenuPage() {
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
+            {/* Detail sheet: full-width image — use wider transform for quality */}
             <MenuImage
               src={selectedItemWithImage.image}
               alt={selectedItemWithImage.name}
               className="mx-4 mt-2 mb-4 h-48 rounded-3xl"
+              priority
+              transformWidth={800}
+              transformHeight={400}
             />
             <div className="px-5 pb-8 space-y-3">
               <div className="flex items-start justify-between gap-3">

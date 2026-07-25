@@ -6,6 +6,27 @@ function t0(label: string) {
   return () => console.debug(`[api] ${label}: ${(performance.now() - start) | 0}ms`);
 }
 
+// ─── Supabase image transform ────────────────────────────────
+/**
+ * Converts a Supabase Storage public URL to a resized/WebP variant served by
+ * Supabase's built-in Imgproxy CDN (no extra cost, no plan requirement).
+ * The CDN caches the transformed variant → subsequent loads are instant.
+ *
+ * Non-Supabase URLs and base64 data URIs are returned unchanged.
+ */
+export function transformImageUrl(
+  src: string | null | undefined,
+  width: number,
+  height: number,
+): string | null {
+  if (!src) return null;
+  if (!src.includes("/storage/v1/object/public/")) return src; // base64 or external
+  return (
+    src.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") +
+    `?width=${width}&height=${height}&resize=cover&quality=80&format=webp`
+  );
+}
+
 // ─── Image cache ─────────────────────────────────────────────
 // Module-level: survives re-renders & React StrictMode double-invocations.
 // TTL: 5 minutes — images change rarely; QR scans reuse this instantly.
