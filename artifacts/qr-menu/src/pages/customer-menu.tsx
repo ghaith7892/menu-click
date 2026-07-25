@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
-import { getRestaurantById, getCategories, getMenuItemsNoImage, getMenuItemImage } from "@/lib/api";
+import { getRestaurantById, getCategories, getMenuItemsNoImage, loadAllImages } from "@/lib/api";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const customerT = {
@@ -32,61 +32,45 @@ const customerT = {
   },
 } as const;
 
-/* ─── Per-item image loader ──────────────────────────────────────────────────
- * Each card fetches its own image independently.
- * - Storage URLs (https://…) → tiny string, browser loads instantly
- * - Base64 images            → fetched one at a time, small individual requests
- * This is far faster than loading ALL images in one huge JSON payload.
- * Uses IntersectionObserver so off-screen items don't waste bandwidth.
+/* ─── Lazy image with fade-in ────────────────────────────────────────────────
+ * For Storage URL images: src is already in props → renders immediately.
+ * For base64/null images:  src arrives later (from Phase 2 batch) → fades in.
+ * Uses native loading="lazy" — the browser handles viewport detection natively,
+ * which is faster and more memory-efficient than IntersectionObserver per item.
  * --------------------------------------------------------------------------- */
-function ItemImage({
-  itemId,
-  preloadedSrc,
+function MenuImage({
+  src,
+  alt,
   className,
-  placeholder = "🍽️",
 }: {
-  itemId: string;
-  preloadedSrc?: string | null;
+  src: string | null | undefined;
+  alt: string;
   className: string;
-  placeholder?: string;
 }) {
-  const [src, setSrc] = useState<string | null>(preloadedSrc ?? null);
-  const ref = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    // If already have image (e.g. Storage URL from initial load), skip fetch
-    if (src) return;
-
-    let cancelled = false;
-    const el = ref.current;
-    if (!el) return;
-
-    // Use IntersectionObserver: only fetch when card enters viewport
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          observer.disconnect();
-          getMenuItemImage(itemId).then((img) => {
-            if (!cancelled && img) setSrc(img);
-          });
-        }
-      },
-      { rootMargin: "200px" } // start loading 200px before entering viewport
+  if (!src) {
+    return (
+      <div className={`${className} bg-gray-100 flex items-center justify-center`}>
+        <span className="text-3xl">🍽️</span>
+      </div>
     );
-    observer.observe(el);
-
-    return () => {
-      cancelled = true;
-      observer.disconnect();
-    };
-  }, [itemId, src]);
+  }
 
   return (
-    <div ref={ref} className={className}>
-      {src ? (
-        <img src={src} className="w-full h-full object-cover" loading="lazy" />
-      ) : (
-        <span className="text-4xl">{placeholder}</span>
+    <div className={`${className} bg-gray-100 overflow-hidden relative`}>
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+      />
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-3xl">🍽️</span>
+        </div>
       )}
     </div>
   );
@@ -104,24 +88,55 @@ export default function CustomerMenuPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  // Separate image state so image updates don't re-render the whole list structure
+  const [imageMap, setImageMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!restaurantId) return;
+    let cancelled = false;
     (async () => {
       setDataLoading(true);
-      // Load everything except images — fast, small payload
+
+      // ── Phase 1: text + metadata + Storage URLs ──────────────────────────
+      // Payload is tiny (a few KB). Updated RPC returns Storage URLs but skips
+      // base64 blobs. Storage URL items get images here — no Phase 2 needed.
       const [rest, cats, items] = await Promise.all([
         getRestaurantById(restaurantId),
         getCategories(restaurantId),
-        getMenuItemsNoImage(restaurantId),
+        getMenuItemsNoImage(restaurantId), // now returns Storage URLs inline
       ]);
+      if (cancelled) return;
       setRestaurant(rest);
       setCategories(cats);
       setMenuItems(items);
+
+      // Seed imageMap with any Storage URLs already in Phase 1 data
+      const phase1Images: Record<string, string> = {};
+      for (const item of items) {
+        if (item.image) phase1Images[item.id] = item.image;
+      }
+      if (Object.keys(phase1Images).length > 0) setImageMap(phase1Images);
       setDataLoading(false);
-      // Images load per-card via ItemImage (IntersectionObserver)
+
+      // ── Phase 2: batch-load remaining (base64) images ────────────────────
+      // Single network request for ALL missing images.
+      // loadAllImages() has a 5-minute module-level cache — repeat QR scans
+      // within the same browser session return instantly from memory.
+      if (items.some(i => !i.image)) {
+        loadAllImages(restaurantId).then(all => {
+          if (!cancelled && Object.keys(all).length > 0) {
+            setImageMap(all); // merge replaces map — includes phase1 URLs too
+          }
+        });
+      }
     })();
+    return () => { cancelled = true; };
   }, [restaurantId]);
+
+  // selectedItem tracks the full item; keep its image in sync when imageMap updates
+  const selectedItemWithImage = selectedItem
+    ? { ...selectedItem, image: imageMap[selectedItem.id] ?? selectedItem.image }
+    : null;
 
   const filteredItems = menuItems.filter(item => {
     if (!item.is_available) return false;
@@ -164,7 +179,6 @@ export default function CustomerMenuPage() {
             <ChevronRight className={`w-4 h-4 ${cdir === "ltr" ? "rotate-180" : ""}`} />
             {ct.back}
           </button>
-
           <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl mx-auto mb-3 shadow-xl">
             {restaurant?.logo ?? "🍽️"}
           </div>
@@ -198,9 +212,7 @@ export default function CustomerMenuPage() {
           <button
             onClick={() => setActiveCategory("all")}
             className={`shrink-0 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              activeCategory === "all"
-                ? "text-white shadow-sm"
-                : "bg-white text-gray-500 border border-gray-200"
+              activeCategory === "all" ? "text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200"
             }`}
             style={activeCategory === "all" ? { background: "linear-gradient(135deg, #7c3aed, #6366f1)" } : {}}
           >
@@ -211,9 +223,7 @@ export default function CustomerMenuPage() {
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
               className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                activeCategory === cat.id
-                  ? "text-white shadow-sm"
-                  : "bg-white text-gray-500 border border-gray-200"
+                activeCategory === cat.id ? "text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200"
               }`}
               style={activeCategory === cat.id ? { background: "linear-gradient(135deg, #7c3aed, #6366f1)" } : {}}
             >
@@ -237,11 +247,11 @@ export default function CustomerMenuPage() {
               onClick={() => setSelectedItem(item)}
               className={`w-full bg-white rounded-2xl p-4 flex gap-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow ${cdir === "rtl" ? "text-right" : "text-left"}`}
             >
-              {/* Image — loads independently, doesn't block item render */}
-              <ItemImage
-                itemId={item.id}
-                preloadedSrc={item.image}
-                className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+              {/* Image: Storage URLs render immediately; base64 fades in from Phase 2 */}
+              <MenuImage
+                src={imageMap[item.id] ?? item.image}
+                alt={item.name}
+                className="w-20 h-20 rounded-xl shrink-0"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-1 mb-1">
@@ -261,7 +271,7 @@ export default function CustomerMenuPage() {
       </div>
 
       {/* ── Item detail bottom sheet ── */}
-      {selectedItem && (
+      {selectedItemWithImage && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
           onClick={() => setSelectedItem(null)}
@@ -273,33 +283,29 @@ export default function CustomerMenuPage() {
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
-
-            {/* Image in detail sheet — always loads since user explicitly opened it */}
-            <ItemImage
-              itemId={selectedItem.id}
-              preloadedSrc={selectedItem.image}
-              className="mx-4 mt-2 mb-4 h-48 bg-gray-100 rounded-3xl flex items-center justify-center overflow-hidden"
-              placeholder="🍽️"
+            <MenuImage
+              src={selectedItemWithImage.image}
+              alt={selectedItemWithImage.name}
+              className="mx-4 mt-2 mb-4 h-48 rounded-3xl"
             />
-
             <div className="px-5 pb-8 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <h2 className="font-black text-xl text-gray-900 leading-tight flex-1">
-                  {selectedItem.name}
-                  {selectedItem.is_popular && <span className="text-sm mr-2">🔥</span>}
+                  {selectedItemWithImage.name}
+                  {selectedItemWithImage.is_popular && <span className="text-sm mr-2">🔥</span>}
                 </h2>
-                <span className="font-black text-2xl text-indigo-600 shrink-0">{selectedItem.price} {currencySymbol}</span>
+                <span className="font-black text-2xl text-indigo-600 shrink-0">
+                  {selectedItemWithImage.price} {currencySymbol}
+                </span>
               </div>
-
-              {selectedItem.description && (
-                <p className="text-sm text-gray-500 leading-relaxed">{selectedItem.description}</p>
+              {selectedItemWithImage.description && (
+                <p className="text-sm text-gray-500 leading-relaxed">{selectedItemWithImage.description}</p>
               )}
-
-              {selectedItem.extras && selectedItem.extras.length > 0 && (
+              {selectedItemWithImage.extras && selectedItemWithImage.extras.length > 0 && (
                 <div className="bg-gray-50 rounded-2xl p-4">
                   <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">{ct.availableExtras}</p>
                   <div className="space-y-2">
-                    {selectedItem.extras.map((extra, i) => (
+                    {selectedItemWithImage.extras.map((extra, i) => (
                       <div key={i} className="flex items-center justify-between text-sm">
                         <span className="text-gray-700">{extra.name}</span>
                         <span className="font-bold text-indigo-600">+{extra.price} {currencySymbol}</span>
@@ -308,7 +314,6 @@ export default function CustomerMenuPage() {
                   </div>
                 </div>
               )}
-
               <button
                 onClick={() => setSelectedItem(null)}
                 className="w-full bg-gray-100 text-gray-700 font-bold py-4 rounded-2xl text-sm hover:bg-gray-200 transition-colors mt-2"

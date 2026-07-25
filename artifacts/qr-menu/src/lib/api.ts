@@ -6,6 +6,21 @@ function t0(label: string) {
   return () => console.debug(`[api] ${label}: ${(performance.now() - start) | 0}ms`);
 }
 
+// ─── Image cache ─────────────────────────────────────────────
+// Module-level: survives re-renders & React StrictMode double-invocations.
+// TTL: 5 minutes — images change rarely; QR scans reuse this instantly.
+const _imgCache = new Map<string, { ts: number; map: Record<string, string> }>();
+const IMG_CACHE_TTL = 5 * 60 * 1000;
+
+export function getImageCache(restaurantId: string): Record<string, string> | null {
+  const e = _imgCache.get(restaurantId);
+  if (!e || Date.now() - e.ts > IMG_CACHE_TTL) { _imgCache.delete(restaurantId); return null; }
+  return e.map;
+}
+export function setImageCache(restaurantId: string, map: Record<string, string>) {
+  _imgCache.set(restaurantId, { ts: Date.now(), map });
+}
+
 // ─── Restaurant ─────────────────────────────────────────────
 export async function getRestaurantByOwner(ownerId: string): Promise<RestaurantRow | null> {
   const done = t0("get_restaurant_by_owner");
@@ -80,10 +95,12 @@ export async function getMenuItemsNoImage(restaurantId: string): Promise<MenuIte
   done();
   if (error) {
     console.error("[api] get_menu_items_no_image:", error.message);
-    // Fallback: use full RPC but strip image client-side
+    // Fallback: full RPC, strip image client-side
     return getMenuItemsSlim(restaurantId);
   }
-  return ((Array.isArray(data) ? data : []) as MenuItemRow[]).map(row => ({ ...row, image: null }));
+  // NOTE: do NOT null out image — updated RPC returns Storage URLs (tiny strings)
+  // and only strips base64 blobs. Storage URL items render immediately.
+  return (Array.isArray(data) ? data : []) as MenuItemRow[];
 }
 
 /** @deprecated Use getMenuItemsNoImage for list views — avoids transferring image blobs */
@@ -118,51 +135,66 @@ export async function getMenuItemImage(id: string): Promise<string | null> {
 }
 
 /**
- * Batch fetch: ONE RPC returns all (id, image) pairs for a restaurant.
- * Use this instead of N per-item getMenuItemImage calls.
- * Requires get_menu_item_images_batch RPC (see batch-images-rpc.sql).
+ * Load ALL images for a restaurant in ONE request, with module-level caching.
+ * - Cache hit  → instant, no network call
+ * - Cache miss → tries get_menu_item_images_batch, falls back to full RPC
+ *
+ * Call this AFTER Phase 1 (getMenuItemsNoImage) to fill in any missing images
+ * (i.e. old base64 items that the updated no-image RPC correctly skipped).
  */
-export async function getMenuItemImagesBatch(
-  restaurantId: string
-): Promise<Record<string, string>> {
+export async function loadAllImages(restaurantId: string): Promise<Record<string, string>> {
+  // Cache hit — return immediately
+  const cached = getImageCache(restaurantId);
+  if (cached) {
+    console.debug(`[api] image cache hit (${Object.keys(cached).length} images)`);
+    return cached;
+  }
+
+  // Try the batch RPC first (smallest payload — only id+image pairs)
   const done = t0("get_menu_item_images_batch");
   const { data, error } = await supabase.rpc("get_menu_item_images_batch", {
     p_restaurant_id: restaurantId,
   });
   done();
 
-  // Batch RPC returned data — use it (fastest path)
   if (!error && Array.isArray(data) && data.length > 0) {
     const map: Record<string, string> = {};
     for (const row of data as { id: string; image: string | null }[]) {
       if (row.id && row.image) map[row.id] = row.image;
     }
-    console.debug(`[api] batch images: ${Object.keys(map).length} images`);
+    console.debug(`[api] batch images: ${Object.keys(map).length}`);
+    setImageCache(restaurantId, map);
     return map;
   }
 
-  // Batch RPC failed OR returned 0 rows (schema cache not refreshed, or no images)
-  // Fall back to the full items RPC — always exists, always works.
-  if (error) {
-    console.warn("[api] get_menu_item_images_batch fallback:", error.message);
-  } else {
-    console.debug("[api] get_menu_item_images_batch returned 0 rows — trying full RPC");
-  }
+  // Batch RPC unavailable (schema cache not refreshed) → full RPC fallback
+  if (error) console.warn("[api] batch RPC fallback:", error.message);
+  else console.debug("[api] batch returned 0 rows — using full RPC");
 
-  const { data: fullData, error: fullErr } = await supabase.rpc(
+  const done2 = t0("get_menu_items_by_restaurant (image fallback)");
+  const { data: full, error: fullErr } = await supabase.rpc(
     "get_menu_items_by_restaurant",
     { p_restaurant_id: restaurantId }
   );
+  done2();
   if (fullErr) {
-    console.error("[api] get_menu_items_by_restaurant (image fallback):", fullErr.message);
+    console.error("[api] image fallback failed:", fullErr.message);
     return {};
   }
-  const fallbackMap: Record<string, string> = {};
-  for (const item of (fullData as { id: string; image: string | null }[] ?? [])) {
-    if (item.id && item.image) fallbackMap[item.id] = item.image;
+  const map: Record<string, string> = {};
+  for (const item of (full as { id: string; image: string | null }[] ?? [])) {
+    if (item.id && item.image) map[item.id] = item.image;
   }
-  console.debug(`[api] fallback images: ${Object.keys(fallbackMap).length} images`);
-  return fallbackMap;
+  console.debug(`[api] fallback images: ${Object.keys(map).length}`);
+  setImageCache(restaurantId, map);
+  return map;
+}
+
+/** @deprecated Use loadAllImages — kept for dashboard edit modal */
+export async function getMenuItemImagesBatch(
+  restaurantId: string
+): Promise<Record<string, string>> {
+  return loadAllImages(restaurantId);
 }
 
 /**

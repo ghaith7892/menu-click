@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import {
   UtensilsCrossed, QrCode,
@@ -10,7 +10,7 @@ import {
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
   getRestaurantByOwner, getRestaurantById, getCategories,
-  getMenuItemsNoImage, getMenuItemImage,
+  getMenuItemsNoImage, getMenuItemImage, loadAllImages,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
@@ -30,45 +30,11 @@ interface Variation {
 }
 
 /* ─── Per-item image loader ───────────────────────── */
-const ItemImage = memo(function ItemImage({
-  itemId,
-  preloadedSrc,
-}: {
-  itemId: string;
-  preloadedSrc?: string | null;
-}) {
-  const [src, setSrc] = useState<string | null>(preloadedSrc ?? null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (src) return;
-    let cancelled = false;
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          observer.disconnect();
-          getMenuItemImage(itemId).then(img => {
-            if (!cancelled && img) setSrc(img);
-          });
-        }
-      },
-      { rootMargin: "300px" }
-    );
-    observer.observe(el);
-    return () => { cancelled = true; observer.disconnect(); };
-  }, [itemId, src]);
-
-  return (
-    <div ref={ref} className="w-full h-full flex items-center justify-center">
-      {src
-        ? <img src={src} className="w-full h-full object-cover" loading="lazy" />
-        : <span className="text-4xl">🍽️</span>
-      }
-    </div>
-  );
-});
+/** Simple image cell — src already resolved (Storage URL or base64 from imageMap) */
+function DashboardItemImage({ src }: { src?: string | null }) {
+  if (!src) return <span className="text-4xl">🍽️</span>;
+  return <img src={src} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />;
+}
 
 /* ─── Toggle Switch ───────────────────────────────── */
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -583,6 +549,7 @@ export default function DashboardPage() {
   const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemRow[]>([]);
+  const [imageMap, setImageMap] = useState<Record<string, string>>({});
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAddItem, setShowAddItem] = useState(false);
@@ -635,7 +602,19 @@ export default function DashboardPage() {
         setCategories(cats);
         setMenuItems(items);
         if (rest.language && rest.language !== lang) setLang(rest.language);
+
+        // Seed imageMap with any Storage URLs already in Phase 1 data
+        const phase1: Record<string, string> = {};
+        for (const it of items) { if (it.image) phase1[it.id] = it.image; }
+        if (Object.keys(phase1).length > 0) setImageMap(phase1);
         setDataLoading(false);
+
+        // Phase 2: one batch call for remaining (base64) images — cached 5 min
+        if (items.some(i => !i.image)) {
+          loadAllImages(rest.id).then(all => {
+            if (Object.keys(all).length > 0) setImageMap(all);
+          });
+        }
         return;
       }
       setDataLoading(false);
@@ -848,7 +827,7 @@ export default function DashboardPage() {
                         onClick={() => setEditingItem(item)}
                         className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group hover:shadow-md transition-all cursor-pointer">
                         <div className="relative h-36 bg-gray-100 overflow-hidden">
-                          <ItemImage itemId={item.id} preloadedSrc={item.image} />
+                          <DashboardItemImage src={imageMap[item.id] ?? item.image} />
                           <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow">
                             <Pencil className="w-3.5 h-3.5" />
                           </div>
