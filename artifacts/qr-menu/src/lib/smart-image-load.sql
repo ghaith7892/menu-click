@@ -11,7 +11,11 @@
 --         Restaurants with old base64 images still work (Phase 2 batch).
 -- ================================================================
 
-CREATE OR REPLACE FUNCTION public.get_menu_items_no_image(p_restaurant_id uuid)
+-- DROP first because we're adding the image column to RETURNS TABLE
+-- (PostgreSQL can't change return type with CREATE OR REPLACE)
+DROP FUNCTION IF EXISTS public.get_menu_items_no_image(uuid);
+
+CREATE FUNCTION public.get_menu_items_no_image(p_restaurant_id uuid)
 RETURNS TABLE (
   id            uuid,
   restaurant_id uuid,
