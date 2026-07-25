@@ -10,7 +10,7 @@ import {
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
   getRestaurantByOwner, getRestaurantById, getCategories,
-  getMenuItemsNoImage, getMenuItemImage, getMenuItemImagesBatch,
+  getMenuItemsNoImage, getMenuItemImage, getMenuItems,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
@@ -598,12 +598,18 @@ export default function DashboardPage() {
 
         // Phase 2: ONE batch RPC → all (id, image) pairs → merge into state
         // Single request, much smaller than full-item bulk load
-        getMenuItemImagesBatch(rest.id).then(imageMap => {
-          setMenuItems(prev =>
-            prev.map(item =>
-              imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
-            )
-          );
+        getMenuItems(rest.id).then(fullItems => {
+          const imageMap: Record<string, string> = {};
+          for (const fi of fullItems) {
+            if (fi.id && fi.image) imageMap[fi.id] = fi.image;
+          }
+          if (Object.keys(imageMap).length > 0) {
+            setMenuItems(prev =>
+              prev.map(item =>
+                imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
+              )
+            );
+          }
         });
         return;
       }

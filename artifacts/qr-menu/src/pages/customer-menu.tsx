@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
-import { getRestaurantById, getCategories, getMenuItemsNoImage, getMenuItemImagesBatch } from "@/lib/api";
+import { getRestaurantById, getCategories, getMenuItemsNoImage, getMenuItems } from "@/lib/api";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const customerT = {
@@ -61,15 +61,20 @@ export default function CustomerMenuPage() {
       setMenuItems(items);
       setDataLoading(false); // ← show menu immediately, no waiting for images
 
-      // Phase 2: ONE batch request for all (id, image) pairs — loads in background
+      // Phase 2: load full items (with images) in background, then merge images into state
       if (items.length > 0) {
-        getMenuItemImagesBatch(restaurantId).then(imageMap => {
-          if (Object.keys(imageMap).length === 0) return;
-          setMenuItems(prev =>
-            prev.map(item =>
-              imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
-            )
-          );
+        getMenuItems(restaurantId).then(fullItems => {
+          const imageMap: Record<string, string> = {};
+          for (const fi of fullItems) {
+            if (fi.id && fi.image) imageMap[fi.id] = fi.image;
+          }
+          if (Object.keys(imageMap).length > 0) {
+            setMenuItems(prev =>
+              prev.map(item =>
+                imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
+              )
+            );
+          }
         });
       }
     })();
