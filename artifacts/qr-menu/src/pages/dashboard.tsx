@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.types";
 import {
-  getRestaurantByOwner, getCategories, getMenuItems, getMenuItemsSlim, getMenuItemImage,
+  getRestaurantByOwner, getRestaurantById, getCategories,
+  getMenuItemsNoImage, getMenuItemImage,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
@@ -26,6 +27,34 @@ interface Variation {
   name: string;
   price: string;
   amount: string;
+}
+
+/* ─── Lazy Item Image ─────────────────────────────── */
+/**
+ * Fetches one item's image on mount via a small per-item RPC call.
+ * This replaces the old Phase-2 bulk load (all images at once) which sent
+ * a multi-MB JSON payload and caused ~1-minute delays.
+ * Storage URLs (http…) are shown directly — browser handles them natively.
+ * Base64 images (data:…) are fetched lazily only when this card renders.
+ */
+function LazyItemImage({ itemId, className }: { itemId: string; className: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getMenuItemImage(itemId).then(img => {
+      if (!cancelled && img) setSrc(img);
+    });
+    return () => { cancelled = true; };
+  }, [itemId]);
+
+  if (!src) {
+    return (
+      <div className={`${className} flex items-center justify-center`}>
+        <span className="text-4xl">🍽️</span>
+      </div>
+    );
+  }
+  return <img src={src} className={`${className} object-cover`} />;
 }
 
 /* ─── Toggle Switch ───────────────────────────────── */
@@ -564,41 +593,36 @@ export default function DashboardPage() {
     if (!user?.id) return;
     (async () => {
       setDataLoading(true);
+      const t0 = performance.now();
 
-      // Retry fetching the restaurant up to 3 times with backoff.
-      // This handles the case where auth loaded quickly but the restaurant
-      // RPC timed out (Supabase cold start) — user.restaurantId may be null.
-      let rest = await getRestaurantByOwner(user.id);
+      // Fast path: auth already resolved the restaurant → PK lookup (indexed, instant)
+      // Slow path: auth timed out on cold start → search by owner_id (needs index)
+      let rest = user.restaurantId
+        ? await getRestaurantById(user.restaurantId)
+        : await getRestaurantByOwner(user.id);
+
+      // One retry if cold-start caused auth to miss the restaurantId
       if (!rest) {
-        console.log("[dashboard] restaurant not found, retrying in 4s…");
-        await new Promise(r => setTimeout(r, 4_000));
+        console.warn("[dashboard] restaurant not found — retrying once in 3s (cold start?)");
+        await new Promise(r => setTimeout(r, 3_000));
         rest = await getRestaurantByOwner(user.id);
       }
-      if (!rest) {
-        console.log("[dashboard] restaurant not found, retrying in 6s…");
-        await new Promise(r => setTimeout(r, 6_000));
-        rest = await getRestaurantByOwner(user.id);
-      }
+
+      console.debug(`[dashboard] restaurant resolved in ${(performance.now() - t0) | 0}ms`);
 
       setRestaurant(rest);
       if (rest) {
-        // Phase 1: slim load (no images) — items appear instantly
-        const [cats, slimItems] = await Promise.all([
+        // Load categories + items (no images) in parallel — fast, small payload
+        const t1 = performance.now();
+        const [cats, items] = await Promise.all([
           getCategories(rest.id),
-          getMenuItemsSlim(rest.id),
+          getMenuItemsNoImage(rest.id),
         ]);
-        setCategories(cats);
-        setMenuItems(slimItems);
-        if (rest.language && rest.language !== lang) {
-          setLang(rest.language);
-        }
-        setDataLoading(false);
+        console.debug(`[dashboard] cats+items in ${(performance.now() - t1) | 0}ms`);
 
-        // Phase 2: load full items with images in background — updates cards silently
-        getMenuItems(rest.id).then((fullItems) => {
-          setMenuItems(fullItems);
-        });
-        return;
+        setCategories(cats);
+        setMenuItems(items);
+        if (rest.language && rest.language !== lang) setLang(rest.language);
       }
       setDataLoading(false);
     })();
@@ -810,10 +834,7 @@ export default function DashboardPage() {
                         onClick={() => setEditingItem(item)}
                         className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm group hover:shadow-md transition-all cursor-pointer">
                         <div className="relative h-36 bg-gray-100 flex items-center justify-center text-4xl overflow-hidden">
-                          {item.image
-                            ? <img src={item.image} className="w-full h-full object-cover" />
-                            : <span className="text-4xl">🍽️</span>
-                          }
+                          <LazyItemImage itemId={item.id} className="w-full h-full" />
                           <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow">
                             <Pencil className="w-3.5 h-3.5" />
                           </div>

@@ -60,47 +60,26 @@ const ADMIN_EMAIL = "ghaithrajab@yahoo.com";
 type RestaurantRow = { id: string; name: string; plan: "free" | "pro" | "enterprise" };
 
 /**
- * Fetch the restaurant for a user with retry + generous timeout.
- * Supabase free tier can take 15-25s on cold start — we allow up to 3 attempts.
+ * Fetch the restaurant for a user — single attempt with 10s timeout.
+ * Keeping auth fast so login is snappy. The dashboard handles retry
+ * if the restaurant wasn't found here (cold-start scenario).
  */
-async function fetchRestaurantWithRetry(userId: string, maxAttempts = 3): Promise<RestaurantRow | null> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      // 25s per attempt — enough for a Supabase cold start
-      const rpcPromise = supabase.rpc("get_restaurant_by_owner", { p_owner_id: userId }) as unknown as Promise<{
-        data: unknown; error: { message: string } | null
-      }>;
-      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>(resolve =>
-        setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 25_000)
-      );
-      const res = await Promise.race([rpcPromise, timeoutPromise]);
-
-      if (res.error) {
-        console.warn(`[auth] get_restaurant_by_owner attempt ${attempt}/${maxAttempts}:`, res.error.message);
-      }
-
-      const rows = res.data as unknown[] | null;
-      const row = Array.isArray(rows) && rows.length > 0
-        ? (rows[0] as RestaurantRow)
-        : null;
-
-      if (row) return row;
-
-      // If not found on final attempt, give up
-      if (attempt === maxAttempts) return null;
-
-      // Wait before retry (Supabase wakes up during this pause)
-      const delayMs = attempt === 1 ? 4_000 : 6_000;
-      console.log(`[auth] Retrying restaurant fetch in ${delayMs / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
-      await new Promise(r => setTimeout(r, delayMs));
-
-    } catch (err) {
-      console.error(`[auth] get_restaurant_by_owner attempt ${attempt} threw:`, err);
-      if (attempt === maxAttempts) return null;
-      await new Promise(r => setTimeout(r, 4_000));
-    }
+async function fetchRestaurantOnce(userId: string): Promise<RestaurantRow | null> {
+  try {
+    const rpcPromise = supabase.rpc("get_restaurant_by_owner", { p_owner_id: userId }) as unknown as Promise<{
+      data: unknown; error: { message: string } | null
+    }>;
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>(resolve =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 10_000)
+    );
+    const res = await Promise.race([rpcPromise, timeoutPromise]);
+    if (res.error) console.warn("[auth] get_restaurant_by_owner:", res.error.message);
+    const rows = res.data as unknown[] | null;
+    return Array.isArray(rows) && rows.length > 0 ? (rows[0] as RestaurantRow) : null;
+  } catch (err) {
+    console.error("[auth] get_restaurant_by_owner threw:", err);
+    return null;
   }
-  return null;
 }
 
 /** Build a user profile. Restaurant data is fetched with retry. */
@@ -112,7 +91,7 @@ async function buildUserProfile(authUser: User): Promise<AuthUser> {
   const result: AuthUser = { id: authUser.id, name, email: authUser.email ?? "", role };
 
   if (role === "restaurant") {
-    const rest = await fetchRestaurantWithRetry(authUser.id);
+    const rest = await fetchRestaurantOnce(authUser.id);
     if (rest) {
       result.restaurantId   = rest.id;
       result.restaurantName = rest.name;

@@ -1,33 +1,46 @@
 import { supabase } from "./supabase";
 import type { CategoryRow, MenuItemExtra, MenuItemRow, RestaurantRow, UserRow } from "./database.types";
 
+function t0(label: string) {
+  const start = performance.now();
+  return () => console.debug(`[api] ${label}: ${(performance.now() - start) | 0}ms`);
+}
+
 // ─── Restaurant ─────────────────────────────────────────────
 export async function getRestaurantByOwner(ownerId: string): Promise<RestaurantRow | null> {
+  const done = t0("get_restaurant_by_owner");
   const { data, error } = await supabase.rpc("get_restaurant_by_owner", { p_owner_id: ownerId });
+  done();
   if (error) console.error("[api] get_restaurant_by_owner:", error.message);
   return Array.isArray(data) && data.length > 0 ? (data[0] as RestaurantRow) : null;
 }
 
 export async function getRestaurantById(id: string): Promise<RestaurantRow | null> {
+  const done = t0("get_restaurant_by_id");
   const { data, error } = await supabase.rpc("get_restaurant_by_id", { p_id: id });
+  done();
   if (error) console.error("[api] get_restaurant_by_id:", error.message);
   return Array.isArray(data) && data.length > 0 ? (data[0] as RestaurantRow) : null;
 }
 
 export async function updateRestaurant(id: string, updates: Partial<RestaurantRow>) {
+  const done = t0("update_restaurant_data");
   const { data, error } = await supabase.rpc("update_restaurant_data", {
     p_restaurant_id: id,
     p_updates: updates,
   });
+  done();
   if (error) console.error("[api] update_restaurant_data:", error.message);
   return { data: data as RestaurantRow | null, error };
 }
 
 // ─── Categories ─────────────────────────────────────────────
 export async function getCategories(restaurantId: string): Promise<CategoryRow[]> {
+  const done = t0("get_categories_by_restaurant");
   const { data, error } = await supabase.rpc("get_categories_by_restaurant", {
     p_restaurant_id: restaurantId,
   });
+  done();
   if (error) console.error("[api] get_categories_by_restaurant:", error.message);
   return (Array.isArray(data) ? data : []) as CategoryRow[];
 }
@@ -54,36 +67,52 @@ export async function deleteCategory(id: string) {
 
 // ─── Menu Items ─────────────────────────────────────────────
 
-/** Full fetch (includes base64 images) — use only when you need images */
-export async function getMenuItems(restaurantId: string): Promise<MenuItemRow[]> {
+/**
+ * Slim fetch — NO image column returned from the server.
+ * Requires get_menu_items_no_image RPC (see performance-indexes.sql).
+ * ~10-50× smaller payload than getMenuItems — use for list views.
+ */
+export async function getMenuItemsNoImage(restaurantId: string): Promise<MenuItemRow[]> {
+  const done = t0("get_menu_items_no_image");
+  const { data, error } = await supabase.rpc("get_menu_items_no_image", {
+    p_restaurant_id: restaurantId,
+  });
+  done();
+  if (error) {
+    console.error("[api] get_menu_items_no_image:", error.message);
+    // Fallback: use full RPC but strip image client-side
+    return getMenuItemsSlim(restaurantId);
+  }
+  return ((Array.isArray(data) ? data : []) as MenuItemRow[]).map(row => ({ ...row, image: null }));
+}
+
+/** @deprecated Use getMenuItemsNoImage for list views — avoids transferring image blobs */
+export async function getMenuItemsSlim(restaurantId: string): Promise<MenuItemRow[]> {
+  const done = t0("get_menu_items_by_restaurant (slim)");
   const { data, error } = await supabase.rpc("get_menu_items_by_restaurant", {
     p_restaurant_id: restaurantId,
   });
+  done();
+  if (error) console.error("[api] getMenuItemsSlim:", error.message);
+  return ((Array.isArray(data) ? data : []) as MenuItemRow[]).map(row => ({ ...row, image: null }));
+}
+
+/** Full fetch (includes images) — use only when you need all images at once */
+export async function getMenuItems(restaurantId: string): Promise<MenuItemRow[]> {
+  const done = t0("get_menu_items_by_restaurant (full)");
+  const { data, error } = await supabase.rpc("get_menu_items_by_restaurant", {
+    p_restaurant_id: restaurantId,
+  });
+  done();
   if (error) console.error("[api] get_menu_items_by_restaurant:", error.message);
   return (Array.isArray(data) ? data : []) as MenuItemRow[];
 }
 
-/**
- * Slim fetch — uses the same RPC as getMenuItems (avoids RLS / PostgREST
- * permission issues) but strips the image field immediately so large base64
- * blobs are NOT kept in React state. Images are loaded lazily per-item.
- */
-export async function getMenuItemsSlim(restaurantId: string): Promise<MenuItemRow[]> {
-  const { data, error } = await supabase.rpc("get_menu_items_by_restaurant", {
-    p_restaurant_id: restaurantId,
-  });
-  if (error) console.error("[api] getMenuItemsSlim:", error.message);
-  // Strip the image field so large base64 blobs are not kept in React state
-  return ((Array.isArray(data) ? data : []) as MenuItemRow[]).map(
-    (row) => ({ ...row, image: null })
-  );
-}
-
-/** Fetch just the image field for a single item (used when edit modal opens) */
+/** Fetch just the image for a single item — used for lazy card images & edit modal */
 export async function getMenuItemImage(id: string): Promise<string | null> {
-  const { data, error } = await supabase.rpc("get_menu_item_image", {
-    p_item_id: id,
-  });
+  const done = t0(`get_menu_item_image(${id.slice(0, 8)})`);
+  const { data, error } = await supabase.rpc("get_menu_item_image", { p_item_id: id });
+  done();
   if (error) console.error("[api] getMenuItemImage:", error.message);
   return typeof data === "string" ? data : null;
 }
@@ -92,10 +121,7 @@ export async function getMenuItemImage(id: string): Promise<string | null> {
  * Upload an image file to Supabase Storage and return its public URL.
  * Falls back to base64 data URL if upload fails.
  */
-export async function uploadMenuImage(
-  file: File,
-  restaurantId: string
-): Promise<string> {
+export async function uploadMenuImage(file: File, restaurantId: string): Promise<string> {
   const ext = file.name.split(".").pop() ?? "jpg";
   const path = `${restaurantId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage
@@ -103,7 +129,6 @@ export async function uploadMenuImage(
     .upload(path, file, { upsert: true });
   if (error) {
     console.error("[api] uploadMenuImage:", error.message);
-    // Fallback: convert to base64 so the upload still works
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (ev) => resolve(ev.target?.result as string);
