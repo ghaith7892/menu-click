@@ -564,7 +564,22 @@ export default function DashboardPage() {
     if (!user?.id) return;
     (async () => {
       setDataLoading(true);
-      const rest = await getRestaurantByOwner(user.id);
+
+      // Retry fetching the restaurant up to 3 times with backoff.
+      // This handles the case where auth loaded quickly but the restaurant
+      // RPC timed out (Supabase cold start) — user.restaurantId may be null.
+      let rest = await getRestaurantByOwner(user.id);
+      if (!rest) {
+        console.log("[dashboard] restaurant not found, retrying in 4s…");
+        await new Promise(r => setTimeout(r, 4_000));
+        rest = await getRestaurantByOwner(user.id);
+      }
+      if (!rest) {
+        console.log("[dashboard] restaurant not found, retrying in 6s…");
+        await new Promise(r => setTimeout(r, 6_000));
+        rest = await getRestaurantByOwner(user.id);
+      }
+
       setRestaurant(rest);
       if (rest) {
         // Phase 1: slim load (no images) — items appear instantly
@@ -583,7 +598,7 @@ export default function DashboardPage() {
         getMenuItems(rest.id).then((fullItems) => {
           setMenuItems(fullItems);
         });
-        return; // skip the setDataLoading(false) below
+        return;
       }
       setDataLoading(false);
     })();

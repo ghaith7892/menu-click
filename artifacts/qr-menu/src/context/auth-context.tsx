@@ -57,31 +57,66 @@ function translateSupabaseError(message: string): string {
 
 const ADMIN_EMAIL = "ghaithrajab@yahoo.com";
 
-// Build profile from an already-known Supabase User object — NO extra network call needed
+type RestaurantRow = { id: string; name: string; plan: "free" | "pro" | "enterprise" };
+
+/**
+ * Fetch the restaurant for a user with retry + generous timeout.
+ * Supabase free tier can take 15-25s on cold start — we allow up to 3 attempts.
+ */
+async function fetchRestaurantWithRetry(userId: string, maxAttempts = 3): Promise<RestaurantRow | null> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      // 25s per attempt — enough for a Supabase cold start
+      const rpcPromise = supabase.rpc("get_restaurant_by_owner", { p_owner_id: userId }) as unknown as Promise<{
+        data: unknown; error: { message: string } | null
+      }>;
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>(resolve =>
+        setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 25_000)
+      );
+      const res = await Promise.race([rpcPromise, timeoutPromise]);
+
+      if (res.error) {
+        console.warn(`[auth] get_restaurant_by_owner attempt ${attempt}/${maxAttempts}:`, res.error.message);
+      }
+
+      const rows = res.data as unknown[] | null;
+      const row = Array.isArray(rows) && rows.length > 0
+        ? (rows[0] as RestaurantRow)
+        : null;
+
+      if (row) return row;
+
+      // If not found on final attempt, give up
+      if (attempt === maxAttempts) return null;
+
+      // Wait before retry (Supabase wakes up during this pause)
+      const delayMs = attempt === 1 ? 4_000 : 6_000;
+      console.log(`[auth] Retrying restaurant fetch in ${delayMs / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
+      await new Promise(r => setTimeout(r, delayMs));
+
+    } catch (err) {
+      console.error(`[auth] get_restaurant_by_owner attempt ${attempt} threw:`, err);
+      if (attempt === maxAttempts) return null;
+      await new Promise(r => setTimeout(r, 4_000));
+    }
+  }
+  return null;
+}
+
+/** Build a user profile. Restaurant data is fetched with retry. */
 async function buildUserProfile(authUser: User): Promise<AuthUser> {
   const meta = authUser.user_metadata ?? {};
-  const name: string  = (meta.name  as string | undefined) || authUser.email?.split("@")[0] || "مستخدم";
+  const name: string  = (meta.name as string | undefined) || authUser.email?.split("@")[0] || "مستخدم";
   const role: UserRole = authUser.email === ADMIN_EMAIL ? "admin" : "restaurant";
 
   const result: AuthUser = { id: authUser.id, name, email: authUser.email ?? "", role };
 
   if (role === "restaurant") {
-    // 8-second timeout so login never hangs indefinitely
-    const rpcPromise = supabase.rpc("get_restaurant_by_owner", { p_owner_id: authUser.id }) as unknown as Promise<{ data: unknown; error: { message: string } | null }>;
-    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>(resolve =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout: get_restaurant_by_owner" } }), 8000)
-    );
-    const res = await Promise.race([rpcPromise, timeoutPromise]);
-    const rpcRows = res.data as unknown[] | null;
-    const rest = Array.isArray(rpcRows) && rpcRows.length > 0
-      ? (rpcRows[0] as { id: string; name: string; plan: "free" | "pro" | "enterprise" })
-      : null;
+    const rest = await fetchRestaurantWithRetry(authUser.id);
     if (rest) {
       result.restaurantId   = rest.id;
       result.restaurantName = rest.name;
       result.plan           = rest.plan;
-    } else if (res.error) {
-      console.error("[auth] get_restaurant_by_owner:", res.error.message);
     }
   }
 
@@ -99,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Restore session on page load
+    // Restore session on page load — buildUserProfile retries internally
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted.current) return;
       if (session?.user) {
@@ -109,8 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted.current) setLoading(false);
     });
 
-    // Listen for session changes (e.g. token refresh, sign-out from another tab)
-    // We skip SIGNED_IN here because login() handles that path directly and faster
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted.current) return;
@@ -118,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setLoading(false);
         } else if (event === "TOKEN_REFRESHED" && session?.user) {
+          // Token refreshed (returning user) — rebuild profile with retry
           const profile = await buildUserProfile(session.user);
           if (mounted.current) setUser(profile);
         }
@@ -143,34 +177,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "يرجى تأكيد بريدك الإلكتروني أولاً — تحقق من صندوق الوارد" };
       }
 
-      // Use the user object already returned — no second auth.getUser() call needed
       let profile = await buildUserProfile(authData.session.user);
 
-      // First-time login after email confirmation: create restaurant if missing
+      // First-time login after email confirmation: create restaurant only if
+      // a pending_restaurant key exists in localStorage (set during register).
+      // Do NOT create a restaurant just because fetchRestaurant returned null
+      // (that would be a timeout/network issue, not a missing restaurant).
       if (profile.role === "restaurant" && !profile.restaurantId) {
         const pendingKey = "pending_restaurant_" + profile.id;
         const pendingRaw = localStorage.getItem(pendingKey);
-        let restaurantName = profile.name ? profile.name : "مطعمي";
-        let plan: "free" | "pro" = "free";
 
         if (pendingRaw) {
+          // Genuine first-time login — create the restaurant now
+          let restaurantName = profile.name || "مطعمي";
+          let plan: "free" | "pro" = "free";
           try {
             const pending = JSON.parse(pendingRaw) as { name: string; plan: "free" | "pro" };
             if (pending.name) restaurantName = pending.name;
             if (pending.plan) plan = pending.plan;
           } catch { /* ignore */ }
           localStorage.removeItem(pendingKey);
+
+          const { error: restErr } = await supabase.rpc("insert_restaurant", {
+            p_id: crypto.randomUUID(),
+            p_owner_id: profile.id,
+            p_name: restaurantName,
+            p_plan: plan,
+          });
+          if (restErr) console.error("[auth] insert_restaurant:", restErr.message);
+
+          // Rebuild profile to pick up the new restaurantId
+          profile = await buildUserProfile(authData.session.user);
+        } else {
+          // Network/timeout issue — user's restaurant exists but we couldn't
+          // fetch it. Let the dashboard handle the retry gracefully.
+          console.warn("[auth] login: restaurantId missing (likely timeout) — dashboard will retry");
         }
-
-        await supabase.rpc("insert_restaurant", {
-          p_id: crypto.randomUUID(),
-          p_owner_id: profile.id,
-          p_name: restaurantName,
-          p_plan: plan,
-        });
-
-        // Re-build to get restaurantId
-        profile = await buildUserProfile(authData.session.user);
       }
 
       if (mounted.current) {
@@ -209,8 +251,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const needsConfirmation = !authData.session;
 
       if (!needsConfirmation && authData.session) {
-        await new Promise(r => setTimeout(r, 800));
-
         const { error: restErr } = await supabase.rpc("insert_restaurant", {
           p_id: crypto.randomUUID(),
           p_owner_id: userId,
@@ -225,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         }
       } else {
+        // Email confirmation required — save details for after confirmation
         localStorage.setItem(
           "pending_restaurant_" + userId,
           JSON.stringify({ name: data.restaurantName, plan: data.plan })

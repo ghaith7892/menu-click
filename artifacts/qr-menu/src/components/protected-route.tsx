@@ -14,9 +14,12 @@ export default function ProtectedRoute({ children, role }: Props) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">جارٍ التحقق...</p>
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-9 h-9 text-primary animate-spin" />
+          <div className="text-center space-y-1">
+            <p className="text-sm font-semibold text-foreground">جارٍ الاتصال…</p>
+            <p className="text-xs text-muted-foreground">قد يستغرق الاتصال الأول بضع ثوانٍ</p>
+          </div>
         </div>
       </div>
     );
