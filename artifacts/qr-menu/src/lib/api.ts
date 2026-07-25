@@ -131,22 +131,37 @@ export async function getMenuItemImagesBatch(
   });
   done();
 
-  if (!error && Array.isArray(data)) {
+  // Batch RPC returned data — use it (fastest path)
+  if (!error && Array.isArray(data) && data.length > 0) {
     const map: Record<string, string> = {};
     for (const row of data as { id: string; image: string | null }[]) {
       if (row.id && row.image) map[row.id] = row.image;
     }
+    console.debug(`[api] batch images: ${Object.keys(map).length} images`);
     return map;
   }
 
-  // Fallback: batch RPC not available (schema cache not refreshed) —
-  // load full items and extract images. Slower but always works.
-  console.warn("[api] get_menu_item_images_batch unavailable, falling back to full RPC:", error?.message);
-  const items = await getMenuItems(restaurantId);
+  // Batch RPC failed OR returned 0 rows (schema cache not refreshed, or no images)
+  // Fall back to the full items RPC — always exists, always works.
+  if (error) {
+    console.warn("[api] get_menu_item_images_batch fallback:", error.message);
+  } else {
+    console.debug("[api] get_menu_item_images_batch returned 0 rows — trying full RPC");
+  }
+
+  const { data: fullData, error: fullErr } = await supabase.rpc(
+    "get_menu_items_by_restaurant",
+    { p_restaurant_id: restaurantId }
+  );
+  if (fullErr) {
+    console.error("[api] get_menu_items_by_restaurant (image fallback):", fullErr.message);
+    return {};
+  }
   const fallbackMap: Record<string, string> = {};
-  for (const item of items) {
+  for (const item of (fullData as { id: string; image: string | null }[] ?? [])) {
     if (item.id && item.image) fallbackMap[item.id] = item.image;
   }
+  console.debug(`[api] fallback images: ${Object.keys(fallbackMap).length} images`);
   return fallbackMap;
 }
 

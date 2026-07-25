@@ -599,7 +599,6 @@ export default function DashboardPage() {
         // Phase 2: ONE batch RPC → all (id, image) pairs → merge into state
         // Single request, much smaller than full-item bulk load
         getMenuItemImagesBatch(rest.id).then(imageMap => {
-          if (Object.keys(imageMap).length === 0) return;
           setMenuItems(prev =>
             prev.map(item =>
               imageMap[item.id] ? { ...item, image: imageMap[item.id] } : item
