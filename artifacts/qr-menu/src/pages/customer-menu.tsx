@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
-import { getRestaurantById, getCategories, getMenuItemsNoImage, loadAllImages, transformImageUrl } from "@/lib/api";
+import { getRestaurantById, getCategories, getMenuItemsNoImage, loadAllImages, transformImageUrl, reportTransformFailed } from "@/lib/api";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const customerT = {
@@ -79,7 +79,7 @@ function MenuImage({
         loading={priority ? "eager" : "lazy"}
         decoding={priority ? "sync" : "async"}
         onLoad={() => setLoaded(true)}
-        onError={() => { if (!errored) setErrored(true); }} // retry with original if transform 404s
+        onError={() => { if (!errored) { reportTransformFailed(); setErrored(true); } }}
         className={`w-full h-full object-cover transition-opacity duration-200 ${loaded ? "opacity-100" : "opacity-0"}`}
       />
       {!loaded && (

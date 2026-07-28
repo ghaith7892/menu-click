@@ -7,11 +7,22 @@ function t0(label: string) {
 }
 
 // ─── Supabase image transform ────────────────────────────────
+// Disabled after first failure: Supabase image transform requires Pro plan.
+// On Free plan /render/image/ returns 404 → every image makes 2 requests
+// (transform attempt → 404 → fallback to original) which causes 2-3s delay.
+// After first onError we flip this flag and skip transforms for the session.
+let _transformSupported = true;
+
+export function reportTransformFailed() {
+  if (_transformSupported) {
+    _transformSupported = false;
+    console.debug("[api] Supabase image transform unsupported — using original URLs");
+  }
+}
+
 /**
- * Converts a Supabase Storage public URL to a resized/WebP variant served by
- * Supabase's built-in Imgproxy CDN (no extra cost, no plan requirement).
- * The CDN caches the transformed variant → subsequent loads are instant.
- *
+ * Returns a Supabase Storage image transform URL for a given size.
+ * Falls back to the original URL if transforms are unsupported (Free plan).
  * Non-Supabase URLs and base64 data URIs are returned unchanged.
  */
 export function transformImageUrl(
@@ -20,7 +31,10 @@ export function transformImageUrl(
   height: number,
 ): string | null {
   if (!src) return null;
-  if (!src.includes("/storage/v1/object/public/")) return src; // base64 or external
+  // base64 or external URL — return as-is
+  if (!src.includes("/storage/v1/object/public/")) return src;
+  // Transform disabled after first 404 (Free plan) — use original directly
+  if (!_transformSupported) return src;
   return (
     src.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") +
     `?width=${width}&height=${height}&resize=cover&quality=80&format=webp`

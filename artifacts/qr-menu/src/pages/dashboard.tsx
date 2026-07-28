@@ -11,6 +11,7 @@ import type { CategoryRow, MenuItemRow, RestaurantRow } from "@/lib/database.typ
 import {
   getRestaurantByOwner, getRestaurantById, getCategories,
   getMenuItemsNoImage, getMenuItemImage, loadAllImages,
+  transformImageUrl, reportTransformFailed,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage
 } from "@/lib/api";
@@ -30,10 +31,21 @@ interface Variation {
 }
 
 /* ─── Per-item image loader ───────────────────────── */
-/** Simple image cell — src already resolved (Storage URL or base64 from imageMap) */
+/** Item card image — transforms Storage URLs to resized WebP; disables transform on first 404 */
 function DashboardItemImage({ src }: { src?: string | null }) {
-  if (!src) return <span className="text-4xl">🍽️</span>;
-  return <img src={src} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />;
+  const [errored, setErrored] = useState(false);
+  const displaySrc = errored ? src : (transformImageUrl(src, 320, 288) ?? src);
+  if (!displaySrc) return <span className="text-4xl">🍽️</span>;
+  return (
+    <img
+      src={displaySrc}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onError={() => { if (!errored) { reportTransformFailed(); setErrored(true); } }}
+      className="w-full h-full object-cover"
+    />
+  );
 }
 
 /* ─── Toggle Switch ───────────────────────────────── */
@@ -569,62 +581,85 @@ export default function DashboardPage() {
 
   useEffect(() => { setPendingLang(lang); }, [lang]);
 
+  // Track last successful data fetch — used to decide if re-fetch is needed
+  const lastFetchRef = useRef<number>(0);
+
+  const fetchDashboardData = useCallback(async (
+    uid: string,
+    rid: string | undefined,
+    force = false,
+  ) => {
+    // Skip if fetched recently (< 10 min) and not forced
+    const age = Date.now() - lastFetchRef.current;
+    if (!force && age < 10 * 60 * 1000 && menuItems.length > 0) {
+      console.debug(`[dashboard] skipping refetch — data is ${(age / 1000) | 0}s old`);
+      return;
+    }
+
+    // Fire image load in parallel BEFORE awaiting restaurant data
+    const imagesPromise = rid ? loadAllImages(rid) : null;
+
+    setDataLoading(true);
+    const t0 = performance.now();
+
+    let rest = rid
+      ? await getRestaurantById(rid)
+      : await getRestaurantByOwner(uid);
+
+    if (!rest) {
+      console.warn("[dashboard] restaurant not found — retrying once in 3s");
+      await new Promise(r => setTimeout(r, 3_000));
+      rest = await getRestaurantByOwner(uid);
+    }
+    console.debug(`[dashboard] restaurant resolved in ${(performance.now() - t0) | 0}ms`);
+
+    setRestaurant(rest);
+    if (rest) {
+      const t1 = performance.now();
+      const [cats, items] = await Promise.all([
+        getCategories(rest.id),
+        getMenuItemsNoImage(rest.id),
+      ]);
+      console.debug(`[dashboard] cats+items in ${(performance.now() - t1) | 0}ms`);
+      setCategories(cats);
+      setMenuItems(items);
+      if (rest.language && rest.language !== lang) setLang(rest.language);
+
+      const phase1: Record<string, string> = {};
+      for (const it of items) { if (it.image) phase1[it.id] = it.image; }
+      if (Object.keys(phase1).length > 0) setImageMap(phase1);
+
+      lastFetchRef.current = Date.now();
+      setDataLoading(false);
+
+      const ip = imagesPromise ?? loadAllImages(rest.id);
+      ip.then(all => { if (Object.keys(all).length > 0) setImageMap(all); });
+      return;
+    }
+    setDataLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang, menuItems.length]);
+
+  // ── Initial load: re-runs when restaurantId arrives after cold-start timeout ─
   useEffect(() => {
     if (!user?.id) return;
-    // ── Fire image load IMMEDIATELY — parallel with restaurant/item fetches ──
-    // Cache hit: resolves in <1ms. Cache miss: ~600ms parallel to ~800ms Phase 1.
-    const imagesPromise = user.restaurantId ? loadAllImages(user.restaurantId) : null;
-
-    (async () => {
-      setDataLoading(true);
-      const t0 = performance.now();
-
-      // Fast path: auth already resolved the restaurant → PK lookup (indexed, instant)
-      // Slow path: auth timed out on cold start → search by owner_id (needs index)
-      let rest = user.restaurantId
-        ? await getRestaurantById(user.restaurantId)
-        : await getRestaurantByOwner(user.id);
-
-      // One retry if cold-start caused auth to miss the restaurantId
-      if (!rest) {
-        console.warn("[dashboard] restaurant not found — retrying once in 3s (cold start?)");
-        await new Promise(r => setTimeout(r, 3_000));
-        rest = await getRestaurantByOwner(user.id);
-      }
-
-      console.debug(`[dashboard] restaurant resolved in ${(performance.now() - t0) | 0}ms`);
-
-      setRestaurant(rest);
-      if (rest) {
-        // Phase 1: categories + items without images — small payload, fast render
-        const t1 = performance.now();
-        const [cats, items] = await Promise.all([
-          getCategories(rest.id),
-          getMenuItemsNoImage(rest.id),
-        ]);
-        console.debug(`[dashboard] cats+items in ${(performance.now() - t1) | 0}ms`);
-        setCategories(cats);
-        setMenuItems(items);
-        if (rest.language && rest.language !== lang) setLang(rest.language);
-
-        // Seed imageMap with any Storage URLs already in Phase 1 data
-        const phase1: Record<string, string> = {};
-        for (const it of items) { if (it.image) phase1[it.id] = it.image; }
-        if (Object.keys(phase1).length > 0) setImageMap(phase1);
-        setDataLoading(false);
-
-        // Await the already-running imagesPromise (started before Phase 1)
-        // or start one now if we didn't have restaurantId from auth
-        const ip = imagesPromise ?? loadAllImages(rest.id);
-        ip.then(all => {
-          if (Object.keys(all).length > 0) setImageMap(all);
-        });
-        return;
-      }
-      setDataLoading(false);
-    })();
+    fetchDashboardData(user.id, user.restaurantId, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, user?.restaurantId]);
+
+  // ── Visibility-change: re-fetch if data is stale when user comes back ────────
+  // Covers: browser tab switch after hours, phone unlock, PWA resume
+  useEffect(() => {
+    if (!user?.id) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        console.debug("[dashboard] visibility visible — checking staleness");
+        fetchDashboardData(user.id, user.restaurantId);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [user?.id, user?.restaurantId, fetchDashboardData]);
 
   const handleLogout = () => { logout(); navigate("/login"); };
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
 
@@ -48,8 +48,17 @@ function translateSupabaseError(message: string): string {
     return "التسجيل مغلق حالياً — تحقق من إعدادات Supabase";
   if (message.includes("rate limit") || message.includes("too many requests") || message.includes("429"))
     return "كثرة المحاولات — انتظر دقيقة ثم أعد المحاولة";
-  if (message.includes("fetch") || message.includes("network") || message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("Load failed"))
+  // Only label as internet error if the device is actually offline
+  if (
+    (message.includes("fetch") || message.includes("network") || message.includes("Failed to fetch") ||
+     message.includes("NetworkError") || message.includes("Load failed")) &&
+    typeof navigator !== "undefined" && !navigator.onLine
+  )
     return "انقطع الاتصال مؤقتاً — تأكد من الإنترنت وأعد المحاولة";
+  // Supabase cold-start or transient error — don't blame internet
+  if (message.includes("timeout") || message.includes("fetch") || message.includes("network") ||
+      message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("Load failed"))
+    return "تعذّر الاتصال بالخادم — حاول مرة أخرى";
   if (message.includes("Invalid API key") || message.includes("invalid key") || message.includes("apikey"))
     return "مفتاح Supabase غير صحيح — تحقق من VITE_SUPABASE_ANON_KEY";
   return "خطأ: " + message;
@@ -61,8 +70,7 @@ type RestaurantRow = { id: string; name: string; plan: "free" | "pro" | "enterpr
 
 /**
  * Fetch the restaurant for a user — single attempt with 10s timeout.
- * Keeping auth fast so login is snappy. The dashboard handles retry
- * if the restaurant wasn't found here (cold-start scenario).
+ * Returns null on timeout/error (dashboard will retry).
  */
 async function fetchRestaurantOnce(userId: string): Promise<RestaurantRow | null> {
   try {
@@ -82,7 +90,7 @@ async function fetchRestaurantOnce(userId: string): Promise<RestaurantRow | null
   }
 }
 
-/** Build a user profile. Restaurant data is fetched with retry. */
+/** Build a full user profile. Restaurant data fetched with 10s timeout. */
 async function buildUserProfile(authUser: User): Promise<AuthUser> {
   const meta = authUser.user_metadata ?? {};
   const name: string  = (meta.name as string | undefined) || authUser.email?.split("@")[0] || "مستخدم";
@@ -106,14 +114,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]       = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const mounted               = useRef(true);
+  // Keep a ref so visibilitychange handler always sees latest user
+  const userRef               = useRef<AuthUser | null>(null);
+  userRef.current = user;
 
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
 
+  // ── Retry restaurant fetch when returning to the app ──────────────────────
+  // Called when: (a) tab becomes visible, (b) internet restored
+  // Only runs if user is logged in but restaurantId is missing
+  const retryRestaurant = useCallback(async () => {
+    const current = userRef.current;
+    if (!current || current.restaurantId || current.role !== "restaurant") return;
+    console.debug("[auth] retrying restaurant fetch (visibility/online event)");
+    const rest = await fetchRestaurantOnce(current.id);
+    if (rest && mounted.current) {
+      setUser(prev => prev ? { ...prev, restaurantId: rest.id, restaurantName: rest.name, plan: rest.plan } : prev);
+    }
+  }, []);
+
   useEffect(() => {
-    // Restore session on page load — buildUserProfile retries internally
+    // ── 1. Restore session on page load ────────────────────────────────────
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted.current) return;
       if (session?.user) {
@@ -123,23 +147,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted.current) setLoading(false);
     });
 
+    // ── 2. Auth state change listener ──────────────────────────────────────
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted.current) return;
+        console.debug("[auth] event:", event);
+
         if (event === "SIGNED_OUT") {
           setUser(null);
           setLoading(false);
-        } else if (event === "TOKEN_REFRESHED" && session?.user) {
-          // Token refreshed (returning user) — rebuild profile with retry
-          const profile = await buildUserProfile(session.user);
-          if (mounted.current) setUser(profile);
+          return;
+        }
+
+        if (
+          (event === "TOKEN_REFRESHED" || event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
+          session?.user
+        ) {
+          const newProfile = await buildUserProfile(session.user);
+          if (!mounted.current) return;
+
+          // ⚠️ KEY FIX: If restaurant fetch timed out (cold-start), do NOT
+          // overwrite an existing restaurantId with undefined. Keep the
+          // previous value — the dashboard will show data correctly.
+          setUser(prev => {
+            if (!prev) return newProfile;
+            return {
+              ...newProfile,
+              restaurantId:   newProfile.restaurantId   ?? prev.restaurantId,
+              restaurantName: newProfile.restaurantName ?? prev.restaurantName,
+              plan:           newProfile.plan           ?? prev.plan,
+            };
+          });
+          setLoading(false);
         }
       }
     );
 
-    return () => subscription.unsubscribe();
-  }, []);
+    // ── 3. visibilitychange — re-check session when app comes back to foreground
+    // Covers: browser tab switch, phone lock/unlock, PWA resume
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        retryRestaurant();
+      }
+    };
 
+    // ── 4. online — re-check when internet is restored after being offline
+    const handleOnline = () => {
+      console.debug("[auth] network restored — retrying restaurant");
+      retryRestaurant();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [retryRestaurant]);
+
+  // ── Login ─────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
     if (!supabaseConfigured) {
       return {
@@ -160,14 +228,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // First-time login after email confirmation: create restaurant only if
       // a pending_restaurant key exists in localStorage (set during register).
-      // Do NOT create a restaurant just because fetchRestaurant returned null
-      // (that would be a timeout/network issue, not a missing restaurant).
       if (profile.role === "restaurant" && !profile.restaurantId) {
         const pendingKey = "pending_restaurant_" + profile.id;
         const pendingRaw = localStorage.getItem(pendingKey);
 
         if (pendingRaw) {
-          // Genuine first-time login — create the restaurant now
           let restaurantName = profile.name || "مطعمي";
           let plan: "free" | "pro" = "free";
           try {
@@ -185,11 +250,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           if (restErr) console.error("[auth] insert_restaurant:", restErr.message);
 
-          // Rebuild profile to pick up the new restaurantId
           profile = await buildUserProfile(authData.session.user);
         } else {
-          // Network/timeout issue — user's restaurant exists but we couldn't
-          // fetch it. Let the dashboard handle the retry gracefully.
           console.warn("[auth] login: restaurantId missing (likely timeout) — dashboard will retry");
         }
       }
@@ -207,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ── Register ──────────────────────────────────────────────────────────────
   const register = async (data: RegisterData) => {
     if (!supabaseConfigured) {
       return {
@@ -244,7 +307,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         }
       } else {
-        // Email confirmation required — save details for after confirmation
         localStorage.setItem(
           "pending_restaurant_" + userId,
           JSON.stringify({ name: data.restaurantName, plan: data.plan })
@@ -259,6 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ── Logout ────────────────────────────────────────────────────────────────
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
