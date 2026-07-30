@@ -13,7 +13,8 @@ import {
   getMenuItemsNoImage, getMenuItemImage, loadAllImages,
   transformImageUrl, reportTransformFailed,
   deleteMenuItem, createMenuItem, updateMenuItem,
-  createCategory, updateRestaurant, uploadMenuImage
+  createCategory, updateRestaurant, uploadMenuImage,
+  migrateBase64Images, type MigrationProgress,
 } from "@/lib/api";
 import { CURRENCIES, getCurrencySymbol } from "@/lib/currencies";
 import { Link, useLocation } from "wouter";
@@ -579,6 +580,10 @@ export default function DashboardPage() {
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [coverSaving, setCoverSaving] = useState(false);
 
+  // Image migration (base64 → Storage)
+  const [migrating, setMigrating] = useState(false);
+  const [migrationResult, setMigrationResult] = useState<MigrationProgress | null>(null);
+
   useEffect(() => { setPendingLang(lang); }, [lang]);
 
   // Track last successful data fetch — used to decide if re-fetch is needed
@@ -1089,6 +1094,70 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+
+            {/* ── Image Migration Card ── */}
+            <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
+              <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-lg bg-amber-50">
+                  🖼️
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-gray-900">{t.migrationTitle}</p>
+                  <p className="text-xs text-gray-400">{t.migrationDesc}</p>
+                </div>
+              </div>
+              <div className="p-5 space-y-3">
+                {migrationResult && (
+                  <div className={`rounded-2xl p-3 text-sm font-semibold text-center ${
+                    migrationResult.total === 0
+                      ? "bg-gray-50 text-gray-500"
+                      : migrationResult.failed > 0
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-green-50 text-green-700"
+                  }`}>
+                    {migrationResult.total === 0
+                      ? t.migrationNone
+                      : migrationResult.failed > 0
+                        ? `${t.migrationFailed} (${migrationResult.done}/${migrationResult.total})`
+                        : `${t.migrationDone} (${migrationResult.done})`}
+                  </div>
+                )}
+                {migrating && (
+                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-2 rounded-full transition-all duration-300"
+                      style={{
+                        width: migrationResult
+                          ? `${Math.round(((migrationResult.done + migrationResult.failed) / migrationResult.total) * 100)}%`
+                          : "5%",
+                        background: "linear-gradient(90deg,#6366f1,#8b5cf6)",
+                      }}
+                    />
+                  </div>
+                )}
+                <button
+                  disabled={migrating || !restaurant}
+                  onClick={async () => {
+                    if (!restaurant) return;
+                    setMigrating(true);
+                    setMigrationResult(null);
+                    const result = await migrateBase64Images(restaurant.id, p => setMigrationResult({ ...p }));
+                    setMigrationResult(result);
+                    setMigrating(false);
+                    // Refresh imageMap with newly migrated URLs
+                    if (result.done > 0) {
+                      const ip = loadAllImages(restaurant.id);
+                      ip.then(all => { if (Object.keys(all).length > 0) setImageMap(all); });
+                    }
+                  }}
+                  className="w-full font-bold py-3 rounded-2xl text-sm transition-all disabled:opacity-50"
+                  style={migrating ? { background: "#e0e7ff", color: "#4f46e5" } : primaryStyle}
+                >
+                  {migrating ? t.migratingMsg : t.migrateBtn}
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
       </div>

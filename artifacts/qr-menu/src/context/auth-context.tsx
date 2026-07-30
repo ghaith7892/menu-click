@@ -72,7 +72,7 @@ type RestaurantRow = { id: string; name: string; plan: "free" | "pro" | "enterpr
  * Fetch the restaurant for a user — single attempt with 10s timeout.
  * Returns null on timeout/error (dashboard will retry).
  */
-async function fetchRestaurantOnce(userId: string): Promise<RestaurantRow | null> {
+async function fetchRestaurantOnce(userId: string, attempt = 1): Promise<RestaurantRow | null> {
   try {
     const rpcPromise = supabase.rpc("get_restaurant_by_owner", { p_owner_id: userId }) as unknown as Promise<{
       data: unknown; error: { message: string } | null
@@ -81,7 +81,22 @@ async function fetchRestaurantOnce(userId: string): Promise<RestaurantRow | null
       setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 10_000)
     );
     const res = await Promise.race([rpcPromise, timeoutPromise]);
-    if (res.error) console.warn("[auth] get_restaurant_by_owner:", res.error.message);
+
+    if (res.error) {
+      const msg = res.error.message ?? "";
+      // PostgREST schema cache miss — function exists but cache not yet refreshed.
+      // Retry with short delays: Supabase usually refreshes within 3-6s.
+      const isSchemaCache =
+        msg.includes("schema cache") || msg.includes("Could not find the function");
+      if (isSchemaCache && attempt <= 3) {
+        const delay = attempt * 2_000; // 2s, 4s, 6s
+        console.debug(`[auth] schema cache miss — retry ${attempt}/3 in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+        return fetchRestaurantOnce(userId, attempt + 1);
+      }
+      console.warn("[auth] get_restaurant_by_owner:", msg);
+    }
+
     const rows = res.data as unknown[] | null;
     return Array.isArray(rows) && rows.length > 0 ? (rows[0] as RestaurantRow) : null;
   } catch (err) {

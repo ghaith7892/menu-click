@@ -127,6 +127,14 @@ const translations = {
     planLabelKey: "الباقة",
     itemsLabel: "عدد الأصناف",
     categoriesLabel: "عدد الأقسام",
+    // Migration
+    migrationTitle: "ترحيل الصور القديمة",
+    migrationDesc: "تحويل صور الأطباق المخزّنة كـ base64 إلى Supabase Storage لتحميل أسرع",
+    migrateBtn: "ابدأ الترحيل",
+    migratingMsg: "جارٍ الترحيل…",
+    migrationDone: "✓ تم الترحيل",
+    migrationNone: "لا توجد صور تحتاج ترحيل",
+    migrationFailed: "فشل ترحيل بعض الصور",
     // Font
     fontFamily: "'Cairo', sans-serif",
     fontUrl: "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap",
@@ -255,6 +263,14 @@ const translations = {
     planLabelKey: "Plan",
     itemsLabel: "Items",
     categoriesLabel: "Categories",
+    // Migration
+    migrationTitle: "Migrate Old Images",
+    migrationDesc: "Convert base64 dish images to Supabase Storage for faster loading",
+    migrateBtn: "Start Migration",
+    migratingMsg: "Migrating…",
+    migrationDone: "✓ Migration complete",
+    migrationNone: "No images need migration",
+    migrationFailed: "Some images failed to migrate",
     // Font
     fontFamily: "'Inter', sans-serif",
     fontUrl: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap",

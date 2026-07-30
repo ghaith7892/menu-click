@@ -287,6 +287,73 @@ export async function deleteMenuItem(id: string) {
   return { error };
 }
 
+// ─── Image Migration (base64 → Supabase Storage) ─────────────────────────────
+
+/** Convert a base64 data URI to a Blob */
+function base64ToBlob(dataUri: string): Blob {
+  const [header, data] = dataUri.split(",");
+  const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+  const bytes = atob(data);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+export type MigrationProgress = { total: number; done: number; failed: number };
+
+/**
+ * One-time migration: converts all base64 dish images for a restaurant to
+ * Supabase Storage URLs. Safe to run multiple times — only touches base64 rows.
+ *
+ * Calls onProgress after each item so the UI can show a live progress bar.
+ */
+export async function migrateBase64Images(
+  restaurantId: string,
+  onProgress?: (p: MigrationProgress) => void,
+): Promise<MigrationProgress> {
+  // Full fetch (includes images) — needed to find base64 rows
+  const { data, error } = await supabase.rpc("get_menu_items_by_restaurant", {
+    p_restaurant_id: restaurantId,
+  });
+  if (error || !Array.isArray(data)) return { total: 0, done: 0, failed: 0 };
+
+  const base64Items = (data as Array<{ id: string; image?: string | null }>).filter(
+    item => typeof item.image === "string" && item.image.startsWith("data:image"),
+  );
+
+  const total = base64Items.length;
+  let done = 0;
+  let failed = 0;
+
+  for (const item of base64Items) {
+    try {
+      const blob = base64ToBlob(item.image!);
+      const ext = blob.type.split("/")[1] ?? "jpg";
+      const file = new File([blob], `migrated_${Date.now()}.${ext}`, { type: blob.type });
+
+      const newUrl = await uploadMenuImage(file, restaurantId);
+
+      if (newUrl.startsWith("http")) {
+        await updateMenuItem(item.id, { image: newUrl });
+        // Patch the module-level image cache so the UI updates without re-fetch
+        const cached = _imgCache.get(restaurantId);
+        if (cached) cached.map[item.id] = newUrl;
+        done++;
+      } else {
+        failed++; // uploadMenuImage fell back to base64 (Storage not configured)
+      }
+    } catch {
+      failed++;
+    }
+    onProgress?.({ total, done, failed });
+  }
+
+  // Bust the cache so next load pulls fresh Storage URLs
+  if (done > 0) _imgCache.delete(restaurantId);
+
+  return { total, done, failed };
+}
+
 // ─── Admin (all via SECURITY DEFINER RPCs — no direct table access) ─────────
 export async function getAllRestaurants(): Promise<RestaurantRow[]> {
   const { data, error } = await supabase.rpc("admin_get_restaurants");
