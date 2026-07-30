@@ -45,6 +45,8 @@ externalPort = 80
 [userenv.shared]
 VITE_SUPABASE_URL = "https://lvltitbfihduwmethfar.supabase.co"
 VITE_SUPABASE_ANON_KEY = "sb_publishable_b0dKpkCKmFspvT8D2KMkhQ_B6Qyl5MG"
+EXPO_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_b0dKpkCKmFspvT8D2KMkhQ_B6Qyl5MG"
+EXPO_PUBLIC_SUPABASE_URL = "https://lvltitbfihduwmethfar.supabase.co"
 
 [nix]
 channel = "stable-25_05"

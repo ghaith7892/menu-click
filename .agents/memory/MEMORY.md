@@ -1,0 +1,2 @@
+- [MenuClick Mobile Supabase setup](menuclick-mobile-supabase.md) — Expo app uses EXPO_PUBLIC_SUPABASE_URL/KEY env vars; AsyncStorage for session persistence; direct RPC calls (same as web).
+- [MenuClick Mobile font](menuclick-mobile-font.md) — Uses @expo-google-fonts/cairo (Arabic support); weights: Cairo_400Regular, Cairo_600SemiBold, Cairo_700Bold; loaded in _layout.tsx.
