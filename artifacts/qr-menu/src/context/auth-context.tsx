@@ -70,12 +70,15 @@ type RestaurantRow = { id: string; name: string; plan: "free" | "pro" | "enterpr
 
 /**
  * Fetch the restaurant for a user — single attempt with 10s timeout.
- * Returns null on timeout/error (dashboard will retry).
+ * On PostgREST schema cache miss (PGRST202): retries up to 3× with short
+ * delays (Supabase usually refreshes within 3-6s), then falls back to a
+ * direct table query so the app never goes blank.
+ * Returns null on timeout/error (dashboard will retry via retryRestaurant).
  */
 async function fetchRestaurantOnce(userId: string, attempt = 1): Promise<RestaurantRow | null> {
   try {
     const rpcPromise = supabase.rpc("get_restaurant_by_owner", { p_owner_id: userId }) as unknown as Promise<{
-      data: unknown; error: { message: string } | null
+      data: unknown; error: { message: string; code?: string } | null
     }>;
     const timeoutPromise = new Promise<{ data: null; error: { message: string } }>(resolve =>
       setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 10_000)
@@ -84,16 +87,38 @@ async function fetchRestaurantOnce(userId: string, attempt = 1): Promise<Restaur
 
     if (res.error) {
       const msg = res.error.message ?? "";
+      const code = (res.error as { code?: string }).code ?? "";
       // PostgREST schema cache miss — function exists but cache not yet refreshed.
-      // Retry with short delays: Supabase usually refreshes within 3-6s.
-      const isSchemaCache =
-        msg.includes("schema cache") || msg.includes("Could not find the function");
-      if (isSchemaCache && attempt <= 3) {
+      // Retry with short delays first; fall back to direct query if retries exhausted.
+      const isSchemaCacheMiss =
+        msg.includes("schema cache") ||
+        msg.includes("Could not find the function") ||
+        code === "PGRST202";
+
+      if (isSchemaCacheMiss && attempt <= 3) {
         const delay = attempt * 2_000; // 2s, 4s, 6s
         console.debug(`[auth] schema cache miss — retry ${attempt}/3 in ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
         return fetchRestaurantOnce(userId, attempt + 1);
       }
+
+      if (isSchemaCacheMiss) {
+        // All retries exhausted — fall back to direct table query
+        console.warn("[auth] get_restaurant_by_owner not in schema cache after retries — using direct query");
+        const { data: fallback, error: fbErr } = await supabase
+          .from("restaurants")
+          .select("id, name, plan")
+          .eq("owner_id", userId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .single();
+        if (fbErr) {
+          console.warn("[auth] direct restaurant fallback:", fbErr.message);
+          return null;
+        }
+        return fallback as RestaurantRow;
+      }
+
       console.warn("[auth] get_restaurant_by_owner:", msg);
     }
 

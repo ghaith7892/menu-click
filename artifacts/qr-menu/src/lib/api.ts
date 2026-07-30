@@ -61,6 +61,27 @@ export async function getRestaurantByOwner(ownerId: string): Promise<RestaurantR
   const done = t0("get_restaurant_by_owner");
   const { data, error } = await supabase.rpc("get_restaurant_by_owner", { p_owner_id: ownerId });
   done();
+
+  // Schema cache miss (PGRST202) — fall back to direct table query
+  const isSchemaCacheMiss =
+    error &&
+    (error.message.includes("schema cache") ||
+     error.message.includes("Could not find the function") ||
+     (error as unknown as { code?: string }).code === "PGRST202");
+
+  if (isSchemaCacheMiss) {
+    console.warn("[api] get_restaurant_by_owner schema cache miss — using direct query");
+    const { data: fb, error: fbErr } = await supabase
+      .from("restaurants")
+      .select("id, name, plan")
+      .eq("owner_id", ownerId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .single();
+    if (fbErr) { console.warn("[api] direct restaurant fallback:", fbErr.message); return null; }
+    return fb as RestaurantRow;
+  }
+
   if (error) console.error("[api] get_restaurant_by_owner:", error.message);
   return Array.isArray(data) && data.length > 0 ? (data[0] as RestaurantRow) : null;
 }
