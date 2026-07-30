@@ -138,8 +138,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // ── 1. Restore session on page load ────────────────────────────────────
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (!mounted.current) return;
+
+      // Stale / corrupted refresh token stored in browser — clear it silently
+      // so the user lands on the login page instead of a broken dashboard.
+      if (error) {
+        const isInvalidToken =
+          error.message?.toLowerCase().includes("refresh token") ||
+          error.message?.toLowerCase().includes("invalid token") ||
+          (error as { status?: number }).status === 400;
+        if (isInvalidToken) {
+          console.warn("[auth] invalid refresh token on startup — forcing sign-out");
+          await supabase.auth.signOut();       // clears localStorage tokens
+        } else {
+          console.error("[auth] getSession error:", error.message);
+        }
+        if (mounted.current) setLoading(false);
+        return;
+      }
+
       if (session?.user) {
         const profile = await buildUserProfile(session.user);
         if (mounted.current) setUser(profile);
@@ -156,6 +174,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === "SIGNED_OUT") {
           setUser(null);
           setLoading(false);
+          return;
+        }
+
+        // TOKEN_REFRESHED with no session = refresh token was rejected (400).
+        // Force sign-out to clear the stale tokens; user will be redirected to login.
+        if (event === "TOKEN_REFRESHED" && !session) {
+          console.warn("[auth] TOKEN_REFRESHED with no session — clearing stale tokens");
+          await supabase.auth.signOut();
+          if (mounted.current) { setUser(null); setLoading(false); }
           return;
         }
 
