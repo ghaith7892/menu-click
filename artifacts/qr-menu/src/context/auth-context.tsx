@@ -69,7 +69,7 @@ const ADMIN_EMAIL = "ghaithrajab@yahoo.com";
 type RestaurantRow = { id: string; name: string; plan: "free" | "pro" | "enterprise" };
 
 /**
- * Fetch the restaurant for a user — single attempt with 10s timeout.
+ * Fetch the restaurant for a user — each RPC attempt has its own 12s timeout.
  * On PostgREST schema cache miss (PGRST202): retries up to 3× with short
  * delays (Supabase usually refreshes within 3-6s), then falls back to a
  * direct table query so the app never goes blank.
@@ -77,11 +77,12 @@ type RestaurantRow = { id: string; name: string; plan: "free" | "pro" | "enterpr
  */
 async function fetchRestaurantOnce(userId: string, attempt = 1): Promise<RestaurantRow | null> {
   try {
+    // Timeout wraps only this individual RPC call, not the whole retry sequence.
     const rpcPromise = supabase.rpc("get_restaurant_by_owner", { p_owner_id: userId }) as unknown as Promise<{
       data: unknown; error: { message: string; code?: string } | null
     }>;
     const timeoutPromise = new Promise<{ data: null; error: { message: string } }>(resolve =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 10_000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 12_000)
     );
     const res = await Promise.race([rpcPromise, timeoutPromise]);
 
@@ -96,7 +97,7 @@ async function fetchRestaurantOnce(userId: string, attempt = 1): Promise<Restaur
         code === "PGRST202";
 
       if (isSchemaCacheMiss && attempt <= 3) {
-        const delay = attempt * 2_000; // 2s, 4s, 6s
+        const delay = attempt * 1_000; // 1s, 2s, 3s  (was 2s/4s/6s — reduced so retries fit within timeout)
         console.debug(`[auth] schema cache miss — retry ${attempt}/3 in ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
         return fetchRestaurantOnce(userId, attempt + 1);
