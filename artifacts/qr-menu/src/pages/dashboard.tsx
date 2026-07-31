@@ -882,7 +882,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <div className="p-3">
-                          <p className="text-sm font-black text-gray-900">{t.fromPrice} {item.price} {getCurrencySymbol(restaurant?.currency)}</p>
+                          <p className="text-sm font-black text-gray-900">{item.price} {restaurant?.currency ?? "AED"}</p>
                           <p className="text-sm text-gray-600 mt-0.5 truncate">{item.name}</p>
                           {item.description && (
                             <p className="text-xs text-gray-400 mt-1 truncate">{item.description}</p>

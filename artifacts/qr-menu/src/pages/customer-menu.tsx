@@ -3,7 +3,6 @@ import { Search, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
 import { getRestaurantById, getCategories, getMenuItemsNoImage, loadAllImages, transformImageUrl, reportTransformFailed } from "@/lib/api";
-import { getCurrencySymbol } from "@/lib/currencies";
 
 const customerT = {
   ar: {
@@ -170,7 +169,7 @@ export default function CustomerMenuPage() {
   const coverBg = restaurant?.cover_color?.startsWith("data:")
     ? undefined
     : (restaurant?.cover_color ?? "#7c3aed");
-  const currencySymbol = getCurrencySymbol(restaurant?.currency);
+  const currencySymbol = restaurant?.currency ?? "AED";
   const clang = restaurant?.language ?? "ar";
   const cdir = clang === "ar" ? "rtl" : "ltr";
   const ct = customerT[clang];
