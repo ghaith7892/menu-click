@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Search, ChevronRight, Loader2 } from "lucide-react";
-import { useParams, useLocation } from "wouter";
+import { Search, Loader2 } from "lucide-react";
+import { useParams } from "wouter";
 import type { MenuItemRow, CategoryRow, RestaurantRow } from "@/lib/database.types";
 import { getRestaurantById, getCategories, getMenuItemsNoImage, loadAllImages, transformImageUrl, reportTransformFailed } from "@/lib/api";
 
@@ -93,7 +93,7 @@ function MenuImage({
 export default function CustomerMenuPage() {
   const params = useParams<{ restaurantId: string }>();
   const restaurantId = params.restaurantId;
-  const [, navigate] = useLocation();
+
 
   const [restaurant, setRestaurant] = useState<RestaurantRow | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -185,13 +185,7 @@ export default function CustomerMenuPage() {
         )}
         <div className="absolute inset-0 bg-black/40" />
         <div className="relative px-4 pt-10 pb-8 text-center">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/25 backdrop-blur-md text-white text-sm font-bold px-3 py-2 rounded-2xl hover:bg-white/40 transition-colors shadow-sm"
-          >
-            <ChevronRight className={`w-4 h-4 ${cdir === "ltr" ? "rotate-180" : ""}`} />
-            {ct.back}
-          </button>
+
           <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl mx-auto mb-3 shadow-xl">
             {restaurant?.logo ?? "🍽️"}
           </div>
