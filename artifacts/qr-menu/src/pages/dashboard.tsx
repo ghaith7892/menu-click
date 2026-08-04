@@ -14,7 +14,6 @@ import {
   transformImageUrl, reportTransformFailed,
   deleteMenuItem, createMenuItem, updateMenuItem,
   createCategory, updateRestaurant, uploadMenuImage,
-  migrateBase64Images, type MigrationProgress,
 } from "@/lib/api";
 import { CURRENCIES, getCurrencySymbol } from "@/lib/currencies";
 import { Link, useLocation } from "wouter";
@@ -580,9 +579,11 @@ export default function DashboardPage() {
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [coverSaving, setCoverSaving] = useState(false);
 
-  // Image migration (base64 → Storage)
-  const [migrating, setMigrating] = useState(false);
-  const [migrationResult, setMigrationResult] = useState<MigrationProgress | null>(null);
+  // Edit restaurant modal
+  const [showEditRestaurant, setShowEditRestaurant] = useState(false);
+  const [editRestaurantName, setEditRestaurantName] = useState("");
+  const [editRestaurantNameEn, setEditRestaurantNameEn] = useState("");
+  const [editRestaurantSaving, setEditRestaurantSaving] = useState(false);
 
   useEffect(() => { setPendingLang(lang); }, [lang]);
 
@@ -719,6 +720,18 @@ export default function DashboardPage() {
 
   const planLabel = (plan?: string) =>
     plan === "pro" ? t.planPro : plan === "enterprise" ? t.planEnterprise : t.planFree;
+
+  const handleSaveRestaurantEdit = async () => {
+    if (!restaurant) return;
+    setEditRestaurantSaving(true);
+    const { data } = await updateRestaurant(restaurant.id, {
+      name: editRestaurantName.trim() || restaurant.name,
+      name_en: editRestaurantNameEn.trim() || restaurant.name_en,
+    });
+    if (data) setRestaurant(data);
+    setEditRestaurantSaving(false);
+    setShowEditRestaurant(false);
+  };
 
   const primaryStyle = { background: "linear-gradient(135deg, #7c3aed, #6366f1)" };
 
@@ -1089,71 +1102,15 @@ export default function DashboardPage() {
                     <span className="font-semibold text-gray-900">{row.value}</span>
                   </div>
                 ))}
-                <button className="w-full mt-2 border border-gray-200 text-gray-700 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-all text-sm">
-                  {t.editInfo}
-                </button>
-              </div>
-            </div>
-
-            {/* ── Image Migration Card ── */}
-            <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm">
-              <div className="p-5 border-b border-gray-100 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-lg bg-amber-50">
-                  🖼️
-                </div>
-                <div>
-                  <p className="font-bold text-sm text-gray-900">{t.migrationTitle}</p>
-                  <p className="text-xs text-gray-400">{t.migrationDesc}</p>
-                </div>
-              </div>
-              <div className="p-5 space-y-3">
-                {migrationResult && (
-                  <div className={`rounded-2xl p-3 text-sm font-semibold text-center ${
-                    migrationResult.total === 0
-                      ? "bg-gray-50 text-gray-500"
-                      : migrationResult.failed > 0
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-green-50 text-green-700"
-                  }`}>
-                    {migrationResult.total === 0
-                      ? t.migrationNone
-                      : migrationResult.failed > 0
-                        ? `${t.migrationFailed} (${migrationResult.done}/${migrationResult.total})`
-                        : `${t.migrationDone} (${migrationResult.done})`}
-                  </div>
-                )}
-                {migrating && (
-                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-2 rounded-full transition-all duration-300"
-                      style={{
-                        width: migrationResult
-                          ? `${Math.round(((migrationResult.done + migrationResult.failed) / migrationResult.total) * 100)}%`
-                          : "5%",
-                        background: "linear-gradient(90deg,#6366f1,#8b5cf6)",
-                      }}
-                    />
-                  </div>
-                )}
                 <button
-                  disabled={migrating || !restaurant}
-                  onClick={async () => {
-                    if (!restaurant) return;
-                    setMigrating(true);
-                    setMigrationResult(null);
-                    const result = await migrateBase64Images(restaurant.id, p => setMigrationResult({ ...p }));
-                    setMigrationResult(result);
-                    setMigrating(false);
-                    // Refresh imageMap with newly migrated URLs
-                    if (result.done > 0) {
-                      const ip = loadAllImages(restaurant.id);
-                      ip.then(all => { if (Object.keys(all).length > 0) setImageMap(all); });
-                    }
+                  onClick={() => {
+                    setEditRestaurantName(restaurant?.name ?? "");
+                    setEditRestaurantNameEn(restaurant?.name_en ?? "");
+                    setShowEditRestaurant(true);
                   }}
-                  className="w-full font-bold py-3 rounded-2xl text-sm transition-all disabled:opacity-50"
-                  style={migrating ? { background: "#e0e7ff", color: "#4f46e5" } : primaryStyle}
+                  className="w-full mt-2 border border-gray-200 text-gray-700 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-all text-sm"
                 >
-                  {migrating ? t.migratingMsg : t.migrateBtn}
+                  {t.editInfo}
                 </button>
               </div>
             </div>
@@ -1195,6 +1152,66 @@ export default function DashboardPage() {
         onDelete={(id) => setMenuItems(prev => prev.filter(i => i.id !== id))}
         currencySymbol={getCurrencySymbol(restaurant?.currency)}
       />
+
+      {/* ── Edit Restaurant Modal ── */}
+      {showEditRestaurant && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
+          onClick={() => setShowEditRestaurant(false)}
+        >
+          <div
+            className="w-full bg-white rounded-t-3xl p-6 space-y-4"
+            dir={dir}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-black text-gray-900 text-base">{t.editInfo}</h3>
+              <button onClick={() => setShowEditRestaurant(false)}>
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Name AR */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                {lang === "ar" ? "اسم المطعم (عربي)" : "Restaurant Name (Arabic)"}
+              </label>
+              <input
+                dir="rtl"
+                value={editRestaurantName}
+                onChange={e => setEditRestaurantName(e.target.value)}
+                className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                placeholder={lang === "ar" ? "اسم المطعم بالعربي" : "Arabic name"}
+              />
+            </div>
+
+            {/* Name EN */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                {lang === "ar" ? "اسم المطعم (إنجليزي)" : "Restaurant Name (English)"}
+              </label>
+              <input
+                dir="ltr"
+                value={editRestaurantNameEn}
+                onChange={e => setEditRestaurantNameEn(e.target.value)}
+                className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                placeholder="Restaurant name in English"
+              />
+            </div>
+
+            <button
+              disabled={editRestaurantSaving}
+              onClick={handleSaveRestaurantEdit}
+              className="w-full text-white font-bold py-3.5 rounded-2xl transition-all disabled:opacity-60"
+              style={primaryStyle}
+            >
+              {editRestaurantSaving
+                ? (lang === "ar" ? "جارٍ الحفظ..." : "Saving...")
+                : t.saveChanges}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
